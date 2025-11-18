@@ -17,9 +17,9 @@ import (
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize the jira-helper configuration",
-	Long: `Initialize the jira-helper by prompting for Jira URL, user, API token,
-and Gemini API key. Non-sensitive data is saved to config.yaml, while
-API keys are stored in a credentials file.`,
+	Long: `Initialize the jira-helper by prompting for Jira URL, API token,
+	and Gemini API key. Non-sensitive data is saved to config.yaml, while
+	API keys are stored in a credentials file.`,
 	RunE: runInit,
 }
 
@@ -33,14 +33,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to read Jira URL: %w", err)
 	}
 	jiraURL = strings.TrimSpace(jiraURL)
-
-	// Prompt for Jira User
-	fmt.Print("Jira User (email): ")
-	jiraUser, err := reader.ReadString('\n')
-	if err != nil {
-		return fmt.Errorf("failed to read Jira user: %w", err)
-	}
-	jiraUser = strings.TrimSpace(jiraUser)
 
 	// Prompt for Jira API Token (password input)
 	fmt.Print("Jira API Token: ")
@@ -79,7 +71,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Save non-sensitive config
 	cfg := &config.Config{
 		JiraURL:           jiraURL,
-		JiraUser:          jiraUser,
 		DefaultProject:    defaultProject,
 		DefaultTaskType:   defaultTaskType,
 		StoryPointOptions: []int{1, 2, 3, 5, 8, 13}, // Default Fibonacci sequence
@@ -92,11 +83,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Store API keys in credentials file
-	if err := credentials.StoreSecret(credentials.JiraServiceKey, jiraUser, jiraToken, configDir); err != nil {
+	// Use empty string for user since we don't need it for Bearer token auth
+	if err := credentials.StoreSecret(credentials.JiraServiceKey, "", jiraToken, configDir); err != nil {
 		return fmt.Errorf("failed to store Jira token: %w", err)
 	}
 
-	if err := credentials.StoreSecret(credentials.GeminiServiceKey, jiraUser, geminiKey, configDir); err != nil {
+	if err := credentials.StoreSecret(credentials.GeminiServiceKey, "", geminiKey, configDir); err != nil {
 		return fmt.Errorf("failed to store Gemini key: %w", err)
 	}
 

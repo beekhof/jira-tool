@@ -11,7 +11,6 @@ import (
 // Config holds the application configuration
 type Config struct {
 	JiraURL           string   `yaml:"jira_url"`
-	JiraUser          string   `yaml:"jira_user"`
 	DefaultProject    string   `yaml:"default_project"`
 	DefaultTaskType   string   `yaml:"default_task_type"`
 	FavoriteAssignees []string `yaml:"favorite_assignees,omitempty"`

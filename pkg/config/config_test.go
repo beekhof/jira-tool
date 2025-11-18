@@ -14,7 +14,6 @@ func TestLoadConfig(t *testing.T) {
 	// Write test config
 	testConfig := &Config{
 		JiraURL:         "https://test.atlassian.net",
-		JiraUser:        "test@example.com",
 		DefaultProject:  "TEST",
 		DefaultTaskType: "Task",
 	}
@@ -32,9 +31,6 @@ func TestLoadConfig(t *testing.T) {
 	if loaded.JiraURL != testConfig.JiraURL {
 		t.Errorf("Expected JiraURL %s, got %s", testConfig.JiraURL, loaded.JiraURL)
 	}
-	if loaded.JiraUser != testConfig.JiraUser {
-		t.Errorf("Expected JiraUser %s, got %s", testConfig.JiraUser, loaded.JiraUser)
-	}
 	if loaded.DefaultProject != testConfig.DefaultProject {
 		t.Errorf("Expected DefaultProject %s, got %s", testConfig.DefaultProject, loaded.DefaultProject)
 	}
@@ -49,7 +45,6 @@ func TestSaveConfig(t *testing.T) {
 
 	testConfig := &Config{
 		JiraURL:           "https://test.atlassian.net",
-		JiraUser:          "test@example.com",
 		DefaultProject:    "TEST",
 		DefaultTaskType:   "Task",
 		StoryPointOptions: []int{1, 2, 3, 5, 8, 13},

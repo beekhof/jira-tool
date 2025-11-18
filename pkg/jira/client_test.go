@@ -27,16 +27,14 @@ func TestUpdateTicketPoints(t *testing.T) {
 			t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
 		}
 
-		// Verify basic auth is present
-		user, pass, ok := r.BasicAuth()
-		if !ok {
-			t.Error("expected basic auth, but it was not present")
+		// Verify Bearer token auth is present
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			t.Error("expected Authorization header, but it was not present")
 		}
-		if user != "test@example.com" {
-			t.Errorf("expected user test@example.com, got %s", user)
-		}
-		if pass != "test-token" {
-			t.Errorf("expected token test-token, got %s", pass)
+		expectedAuth := "Bearer test-token"
+		if authHeader != expectedAuth {
+			t.Errorf("expected Authorization header '%s', got '%s'", expectedAuth, authHeader)
 		}
 
 		// Parse and verify the request body
@@ -69,7 +67,6 @@ func TestUpdateTicketPoints(t *testing.T) {
 		baseURL:    server.URL,
 		httpClient: &http.Client{},
 		authToken:  "test-token",
-		user:       "test@example.com",
 	}
 
 	// Test the UpdateTicketPoints method
@@ -90,7 +87,6 @@ func TestUpdateTicketPoints_NotFound(t *testing.T) {
 		baseURL:    server.URL,
 		httpClient: &http.Client{},
 		authToken:  "test-token",
-		user:       "test@example.com",
 	}
 
 	err := client.UpdateTicketPoints("ENG-999", 5)
@@ -113,7 +109,6 @@ func TestUpdateTicketPoints_Unauthorized(t *testing.T) {
 		baseURL:    server.URL,
 		httpClient: &http.Client{},
 		authToken:  "invalid-token",
-		user:       "test@example.com",
 	}
 
 	err := client.UpdateTicketPoints("ENG-123", 5)
@@ -144,16 +139,14 @@ func TestCreateTicket(t *testing.T) {
 			t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
 		}
 
-		// Verify basic auth is present
-		user, pass, ok := r.BasicAuth()
-		if !ok {
-			t.Error("expected basic auth, but it was not present")
+		// Verify Bearer token auth is present
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			t.Error("expected Authorization header, but it was not present")
 		}
-		if user != "test@example.com" {
-			t.Errorf("expected user test@example.com, got %s", user)
-		}
-		if pass != "test-token" {
-			t.Errorf("expected token test-token, got %s", pass)
+		expectedAuth := "Bearer test-token"
+		if authHeader != expectedAuth {
+			t.Errorf("expected Authorization header '%s', got '%s'", expectedAuth, authHeader)
 		}
 
 		// Parse and verify the request body
@@ -208,7 +201,6 @@ func TestCreateTicket(t *testing.T) {
 		baseURL:    server.URL,
 		httpClient: &http.Client{},
 		authToken:  "test-token",
-		user:       "test@example.com",
 	}
 
 	// Test the CreateTicket method
@@ -233,7 +225,6 @@ func TestCreateTicket_Error(t *testing.T) {
 		baseURL:    server.URL,
 		httpClient: &http.Client{},
 		authToken:  "test-token",
-		user:       "test@example.com",
 	}
 
 	_, err := client.CreateTicket("INVALID", "Task", "Test")

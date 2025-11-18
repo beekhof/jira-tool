@@ -141,7 +141,6 @@ type jiraClient struct {
 	baseURL    string
 	httpClient *http.Client
 	authToken  string
-	user       string
 	cache      *Cache
 }
 
@@ -158,11 +157,7 @@ func NewClient(configDir string) (JiraClient, error) {
 		return nil, fmt.Errorf("jira_url not configured. Please run 'jira init'")
 	}
 
-	if cfg.JiraUser == "" {
-		return nil, fmt.Errorf("jira_user not configured. Please run 'jira init'")
-	}
-
-	token, err := credentials.GetSecret(credentials.JiraServiceKey, cfg.JiraUser, configDir)
+	token, err := credentials.GetSecret(credentials.JiraServiceKey, "", configDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Jira token: %w", err)
 	}
@@ -179,11 +174,15 @@ func NewClient(configDir string) (JiraClient, error) {
 		baseURL:    cfg.JiraURL,
 		httpClient: &http.Client{},
 		authToken:  token,
-		user:       cfg.JiraUser,
 		cache:      cache,
 	}
 
 	return client, nil
+}
+
+// setAuth sets the Bearer token authentication header on the request
+func (c *jiraClient) setAuth(req *http.Request) {
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.authToken))
 }
 
 // UpdateTicketPoints updates the story points for a ticket
@@ -214,7 +213,7 @@ func (c *jiraClient) UpdateTicketPoints(ticketID string, points int) error {
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	// Execute the request
 	resp, err := c.httpClient.Do(req)
@@ -262,7 +261,7 @@ func (c *jiraClient) UpdateTicketDescription(ticketID, description string) error
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	// Execute the request
 	resp, err := c.httpClient.Do(req)
@@ -322,7 +321,7 @@ func (c *jiraClient) CreateTicket(project, taskType, summary string) (string, er
 
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	// Execute the request
 	resp, err := c.httpClient.Do(req)
@@ -385,7 +384,7 @@ func (c *jiraClient) CreateTicketWithParent(project, taskType, summary, parentKe
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -424,7 +423,7 @@ func (c *jiraClient) GetTransitions(ticketID string) ([]Transition, error) {
 	}
 
 	req.Header.Set("Accept", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -475,7 +474,7 @@ func (c *jiraClient) TransitionTicket(ticketID, transitionID string) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -503,7 +502,7 @@ func (c *jiraClient) GetTicketDescription(ticketID string) (string, error) {
 	}
 
 	req.Header.Set("Accept", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -545,7 +544,7 @@ func (c *jiraClient) GetTicketAttachments(ticketID string) ([]Attachment, error)
 	}
 
 	req.Header.Set("Accept", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -587,7 +586,7 @@ func (c *jiraClient) GetTicketComments(ticketID string) ([]Comment, error) {
 	}
 
 	req.Header.Set("Accept", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -636,7 +635,7 @@ func (c *jiraClient) AddIssuesToSprint(sprintID int, issueKeys []string) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -676,7 +675,7 @@ func (c *jiraClient) AddIssuesToRelease(releaseID string, issueKeys []string) er
 		}
 
 		req.Header.Set("Content-Type", "application/json")
-		req.SetBasicAuth(c.user, c.authToken)
+		c.setAuth(req)
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
@@ -712,7 +711,7 @@ func (c *jiraClient) getSprints(endpoint string) ([]SprintParsed, error) {
 	}
 
 	req.Header.Set("Accept", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -762,7 +761,7 @@ func (c *jiraClient) GetReleases(projectKey string) ([]ReleaseParsed, error) {
 	}
 
 	req.Header.Set("Accept", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -835,7 +834,7 @@ func (c *jiraClient) searchIssues(jql string) ([]Issue, error) {
 	}
 
 	req.Header.Set("Accept", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -922,7 +921,7 @@ func (c *jiraClient) SearchUsers(query string) ([]User, error) {
 	}
 
 	req.Header.Set("Accept", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -982,7 +981,7 @@ func (c *jiraClient) AssignTicket(ticketID, userAccountID string) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -1023,7 +1022,7 @@ func (c *jiraClient) GetPriorities() ([]Priority, error) {
 	}
 
 	req.Header.Set("Accept", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -1084,7 +1083,7 @@ func (c *jiraClient) UpdateTicketPriority(ticketID, priorityID string) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth(c.user, c.authToken)
+	c.setAuth(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
