@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -40,7 +41,7 @@ func ListModels(configDir string) ([]ModelInfo, error) {
 
 	for _, version := range versions {
 		url := fmt.Sprintf("https://generativelanguage.googleapis.com/%s/models?key=%s", version, apiKey)
-		
+
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			lastErr = err
@@ -143,8 +144,8 @@ type ListModelsResponse struct {
 
 // ModelInfo represents information about a model
 type ModelInfo struct {
-	Name         string   `json:"name"`
-	DisplayName  string   `json:"displayName"`
+	Name             string   `json:"name"`
+	DisplayName      string   `json:"displayName"`
 	SupportedMethods []string `json:"supportedGenerationMethods"`
 }
 
@@ -216,38 +217,48 @@ func (c *geminiClient) buildDescriptionPrompt(history []string, context string) 
 func (c *geminiClient) generateContent(prompt string) (string, error) {
 	const maxRetries = 3
 	const initialBackoff = 5 * time.Second
-	
+
 	var lastErr error
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
-			// Exponential backoff: 1s, 2s, 4s
+			// Exponential backoff: 5s, 10s, 20s
 			backoff := initialBackoff * time.Duration(1<<uint(attempt-1))
+			fmt.Fprintf(os.Stderr, "Gemini API error (attempt %d/%d). Retrying in %v...\n", attempt, maxRetries+1, backoff)
 			time.Sleep(backoff)
 		}
-		
+
 		result, err := c.generateContentOnce(prompt)
 		if err == nil {
+			if attempt > 0 {
+				fmt.Fprintf(os.Stderr, "Request succeeded after %d retry(ies).\n", attempt)
+			}
 			return result, nil
 		}
-		
+
 		lastErr = err
 		errStr := err.Error()
-		
+
 		// Only retry on transient errors (503, 500, 502, 504, 429)
-		if !strings.Contains(errStr, "503") &&
-			!strings.Contains(errStr, "500") &&
-			!strings.Contains(errStr, "502") &&
-			!strings.Contains(errStr, "504") &&
-			!strings.Contains(errStr, "429") {
+		// Check for both status codes and error messages
+		isRetryable := strings.Contains(errStr, "503") ||
+			strings.Contains(errStr, "500") ||
+			strings.Contains(errStr, "502") ||
+			strings.Contains(errStr, "504") ||
+			strings.Contains(errStr, "429") ||
+			strings.Contains(errStr, "temporarily unavailable") ||
+			strings.Contains(errStr, "server error") ||
+			strings.Contains(errStr, "rate limit")
+
+		if !isRetryable {
 			return "", err
 		}
-		
+
 		// On last attempt, return the error
 		if attempt == maxRetries {
 			return "", fmt.Errorf("%w (after %d retries)", err, maxRetries)
 		}
 	}
-	
+
 	return "", lastErr
 }
 
@@ -290,7 +301,7 @@ func (c *geminiClient) generateContentOnce(prompt string) (string, error) {
 	// Check response status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		
+
 		// Parse error response for better error messages
 		var apiError struct {
 			Error struct {
@@ -300,7 +311,7 @@ func (c *geminiClient) generateContentOnce(prompt string) (string, error) {
 			} `json:"error"`
 		}
 		json.Unmarshal(body, &apiError)
-		
+
 		// Provide user-friendly error messages
 		switch resp.StatusCode {
 		case 401, 403:
