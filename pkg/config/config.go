@@ -10,15 +10,17 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	JiraURL           string   `yaml:"jira_url"`
-	DefaultProject    string   `yaml:"default_project"`
-	DefaultTaskType   string   `yaml:"default_task_type"`
-	GeminiModel       string   `yaml:"gemini_model,omitempty"`
-	MaxQuestions      int      `yaml:"max_questions,omitempty"`
-	FavoriteAssignees []string `yaml:"favorite_assignees,omitempty"`
-	FavoriteSprints   []string `yaml:"favorite_sprints,omitempty"`
-	FavoriteReleases  []string `yaml:"favorite_releases,omitempty"`
-	StoryPointOptions []int    `yaml:"story_point_options,omitempty"`
+	JiraURL                string   `yaml:"jira_url"`
+	DefaultProject         string   `yaml:"default_project"`
+	DefaultTaskType        string   `yaml:"default_task_type"`
+	GeminiModel            string   `yaml:"gemini_model,omitempty"`
+	MaxQuestions           int      `yaml:"max_questions,omitempty"`
+	QuestionPromptTemplate string   `yaml:"question_prompt_template,omitempty"`
+	DescriptionPromptTemplate string `yaml:"description_prompt_template,omitempty"`
+	FavoriteAssignees      []string `yaml:"favorite_assignees,omitempty"`
+	FavoriteSprints        []string `yaml:"favorite_sprints,omitempty"`
+	FavoriteReleases       []string `yaml:"favorite_releases,omitempty"`
+	StoryPointOptions      []int    `yaml:"story_point_options,omitempty"`
 }
 
 // GetConfigPath returns the path for the config file

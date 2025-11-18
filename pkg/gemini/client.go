@@ -22,9 +22,11 @@ type GeminiClient interface {
 
 // geminiClient is the concrete implementation of GeminiClient
 type geminiClient struct {
-	apiKey  string
-	baseURL string
-	client  *http.Client
+	apiKey                    string
+	baseURL                   string
+	client                    *http.Client
+	questionPromptTemplate    string
+	descriptionPromptTemplate string
 }
 
 // ListModels lists available Gemini models
@@ -105,11 +107,50 @@ func NewClient(configDir string) (GeminiClient, error) {
 		modelName = strings.TrimPrefix(model, "models/")
 	}
 
+	// Get prompt templates or use defaults
+	questionTemplate := cfg.QuestionPromptTemplate
+	if questionTemplate == "" {
+		questionTemplate = getDefaultQuestionPrompt()
+	}
+
+	descriptionTemplate := cfg.DescriptionPromptTemplate
+	if descriptionTemplate == "" {
+		descriptionTemplate = getDefaultDescriptionPrompt()
+	}
+
 	return &geminiClient{
-		apiKey:  apiKey,
-		baseURL: fmt.Sprintf("https://generativelanguage.googleapis.com/v1/models/%s:generateContent", modelName),
-		client:  &http.Client{},
+		apiKey:                    apiKey,
+		baseURL:                   fmt.Sprintf("https://generativelanguage.googleapis.com/v1/models/%s:generateContent", modelName),
+		client:                    &http.Client{},
+		questionPromptTemplate:    questionTemplate,
+		descriptionPromptTemplate: descriptionTemplate,
 	}, nil
+}
+
+// getDefaultQuestionPrompt returns the default question generation prompt template
+func getDefaultQuestionPrompt() string {
+	return `You are helping to create a Jira ticket. Based on the following context and conversation history, ask ONE clarifying question to better understand what needs to be done.
+
+Context: {{context}}
+
+{{history}}
+
+Ask only ONE clear, concise question. Do not include any preamble or explanation, just the question.`
+}
+
+// getDefaultDescriptionPrompt returns the default description generation prompt template
+func getDefaultDescriptionPrompt() string {
+	return `You are helping to create a Jira ticket description. Based on the following context and conversation history, write a clear, comprehensive Jira ticket description.
+
+Context: {{context}}
+
+{{history}}
+
+Write a professional Jira ticket description that includes:
+- Clear explanation of what needs to be done
+- Any relevant context or background
+- Expected outcomes or acceptance criteria if applicable
+Format it as plain text suitable for a Jira description field.`
 }
 
 // GeminiRequest represents the request payload
@@ -163,54 +204,42 @@ func (c *geminiClient) GenerateDescription(history []string, context string) (st
 
 // buildQuestionPrompt constructs the prompt for generating a question
 func (c *geminiClient) buildQuestionPrompt(history []string, context string) string {
-	var sb strings.Builder
-
-	sb.WriteString("You are helping to create a Jira ticket. ")
-	sb.WriteString("Based on the following context and conversation history, ask ONE clarifying question to better understand what needs to be done.\n\n")
-
-	sb.WriteString("Context: ")
-	sb.WriteString(context)
-	sb.WriteString("\n\n")
-
+	// Build history section
+	historySection := ""
 	if len(history) > 0 {
+		var sb strings.Builder
 		sb.WriteString("Conversation history:\n")
 		for i, entry := range history {
 			sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, entry))
 		}
-		sb.WriteString("\n")
+		historySection = sb.String()
 	}
 
-	sb.WriteString("Ask only ONE clear, concise question. Do not include any preamble or explanation, just the question.")
+	// Replace template placeholders
+	prompt := strings.ReplaceAll(c.questionPromptTemplate, "{{context}}", context)
+	prompt = strings.ReplaceAll(prompt, "{{history}}", historySection)
 
-	return sb.String()
+	return prompt
 }
 
 // buildDescriptionPrompt constructs the prompt for generating a description
 func (c *geminiClient) buildDescriptionPrompt(history []string, context string) string {
-	var sb strings.Builder
-
-	sb.WriteString("You are helping to create a Jira ticket description. ")
-	sb.WriteString("Based on the following context and conversation history, write a clear, comprehensive Jira ticket description.\n\n")
-
-	sb.WriteString("Context: ")
-	sb.WriteString(context)
-	sb.WriteString("\n\n")
-
+	// Build history section
+	historySection := ""
 	if len(history) > 0 {
+		var sb strings.Builder
 		sb.WriteString("Conversation history:\n")
 		for i, entry := range history {
 			sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, entry))
 		}
-		sb.WriteString("\n")
+		historySection = sb.String()
 	}
 
-	sb.WriteString("Write a professional Jira ticket description that includes:\n")
-	sb.WriteString("- Clear explanation of what needs to be done\n")
-	sb.WriteString("- Any relevant context or background\n")
-	sb.WriteString("- Expected outcomes or acceptance criteria if applicable\n")
-	sb.WriteString("Format it as plain text suitable for a Jira description field.")
+	// Replace template placeholders
+	prompt := strings.ReplaceAll(c.descriptionPromptTemplate, "{{context}}", context)
+	prompt = strings.ReplaceAll(prompt, "{{history}}", historySection)
 
-	return sb.String()
+	return prompt
 }
 
 // generateContent makes the actual API call to Gemini with automatic retry for transient errors
