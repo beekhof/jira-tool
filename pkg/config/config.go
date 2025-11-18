@@ -17,6 +17,8 @@ type Config struct {
 	MaxQuestions           int      `yaml:"max_questions,omitempty"`
 	QuestionPromptTemplate string   `yaml:"question_prompt_template,omitempty"`
 	DescriptionPromptTemplate string `yaml:"description_prompt_template,omitempty"`
+	SpikeQuestionPromptTemplate string `yaml:"spike_question_prompt_template,omitempty"`
+	SpikePromptTemplate    string   `yaml:"spike_prompt_template,omitempty"`
 	FavoriteAssignees      []string `yaml:"favorite_assignees,omitempty"`
 	FavoriteSprints        []string `yaml:"favorite_sprints,omitempty"`
 	FavoriteReleases       []string `yaml:"favorite_releases,omitempty"`

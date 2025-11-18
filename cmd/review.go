@@ -265,13 +265,23 @@ func handleDetail(client jira.JiraClient, reader *bufio.Reader, ticketID, summar
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 	
+	// Get ticket details to check for spike (need summary and key)
+	issues, err := client.SearchTickets(fmt.Sprintf("key = %s", ticketID))
+	if err != nil {
+		return fmt.Errorf("failed to get ticket details: %w", err)
+	}
+	if len(issues) == 0 {
+		return fmt.Errorf("ticket %s not found", ticketID)
+	}
+	ticketSummary := issues[0].Fields.Summary
+	
 	geminiClient, err := gemini.NewClient(configDir)
 	if err != nil {
 		return err
 	}
 
-	// Run Q&A flow
-	description, err := qa.RunQAFlow(geminiClient, summary, cfg.MaxQuestions)
+	// Run Q&A flow (pass summary to detect spike based on SPIKE prefix)
+	description, err := qa.RunQAFlow(geminiClient, summary, cfg.MaxQuestions, ticketSummary)
 	if err != nil {
 		return err
 	}

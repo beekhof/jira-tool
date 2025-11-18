@@ -104,12 +104,24 @@ favorite_releases:
 
 You can customize the prompts used for generating questions and descriptions:
 
-- **`question_prompt_template`** (optional): Template for question generation
-- **`description_prompt_template`** (optional): Template for description generation
+- **`question_prompt_template`** (optional): Template for question generation (used for Tasks, Bugs, Epics, etc.)
+- **`description_prompt_template`** (optional): Template for description generation (used for Tasks, Bugs, Epics, etc.)
+- **`spike_question_prompt_template`** (optional): Template for question generation for research spikes
+- **`spike_prompt_template`** (optional): Template for research spike descriptions (used when ticket summary/key has "SPIKE" prefix)
 
 **Template Placeholders:**
 - `{{context}}` - The context string (ticket summary, epic summary, etc.)
 - `{{history}}` - Formatted conversation history from Q&A flow
+
+**Spike Detection:**
+- The tool automatically detects spikes based on the ticket summary or key having a "SPIKE" prefix (case-insensitive)
+- Spikes are modeled as Tasks with a "SPIKE" prefix in the summary (e.g., "SPIKE: Research authentication options")
+- For **Spike** tickets (detected by "SPIKE" prefix):
+  - Question generation uses `spike_question_prompt_template` (focuses on constraining research scope)
+  - Description generation uses `spike_prompt_template` (creates research plans)
+- For all other tickets (Task, Bug, Epic, Story, etc.):
+  - Question generation uses `question_prompt_template` (focuses on implementation details)
+  - Description generation uses `description_prompt_template` (creates implementation descriptions)
 
 **Example Custom Templates:**
 
@@ -140,13 +152,49 @@ description_prompt_template: |
   - Dependencies (if any)
   
   Format as Markdown.
+
+spike_question_prompt_template: |
+  You are helping to scope a research spike. Ask questions that help constrain and focus the research area.
+  
+  Context: {{context}}
+  
+  Previous conversation:
+  {{history}}
+  
+  Ask ONE question that helps define the scope or boundaries of the research.
+  Focus on understanding what needs to be investigated, not on dictating a solution.
+  Be concise and focus on research boundaries.
+
+spike_prompt_template: |
+  Create a research spike plan for investigating a technical question.
+  
+  Context: {{context}}
+  
+  Q&A History:
+  {{history}}
+  
+  Include:
+  - Research objectives and questions to answer
+  - Areas to investigate
+  - Expected deliverables and findings
+  - Success criteria for the research
+  - Timeline estimates if applicable
+  
+  Format as Markdown.
 ```
 
 **Default Templates:**
 
 If not specified, the tool uses built-in defaults:
-- Question prompt: Asks for ONE clarifying question about the context
-- Description prompt: Creates a professional Jira description with clear explanation, context, and acceptance criteria
+- **Question prompt**: Asks for ONE clarifying question about implementation details (for Tasks, Bugs, Epics, etc.)
+- **Spike question prompt**: Asks for ONE question to constrain and focus the research area (for Spikes)
+- **Description prompt**: Creates a professional Jira description with clear explanation, context, and acceptance criteria (for implementation tasks)
+- **Spike prompt**: Creates a research plan with objectives, investigation areas, deliverables, and success criteria (for research spikes)
+
+To view the default templates in YAML format, run:
+```bash
+jira templates
+```
 
 ### Custom Configuration Directory
 
@@ -231,6 +279,15 @@ List available Gemini models that support `generateContent`.
 ```bash
 jira models
 ```
+
+### `templates`
+Display the default prompt templates in YAML format that can be copied into your config file.
+
+```bash
+jira templates
+```
+
+This command outputs all four default templates (`question_prompt_template`, `description_prompt_template`, `spike_question_prompt_template`, and `spike_prompt_template`) in a format ready to be copied into your `config.yaml` file for customization.
 
 ## Authentication
 

@@ -16,17 +16,19 @@ import (
 
 // GeminiClient defines the interface for Gemini operations
 type GeminiClient interface {
-	GenerateQuestion(history []string, context string) (string, error)
-	GenerateDescription(history []string, context string) (string, error)
+	GenerateQuestion(history []string, context string, issueType string) (string, error)
+	GenerateDescription(history []string, context string, issueType string) (string, error)
 }
 
 // geminiClient is the concrete implementation of GeminiClient
 type geminiClient struct {
-	apiKey                    string
-	baseURL                   string
-	client                    *http.Client
-	questionPromptTemplate    string
-	descriptionPromptTemplate string
+	apiKey                      string
+	baseURL                     string
+	client                      *http.Client
+	questionPromptTemplate      string
+	descriptionPromptTemplate   string
+	spikeQuestionPromptTemplate string
+	spikePromptTemplate         string
 }
 
 // ListModels lists available Gemini models
@@ -118,12 +120,24 @@ func NewClient(configDir string) (GeminiClient, error) {
 		descriptionTemplate = getDefaultDescriptionPrompt()
 	}
 
+	spikeQuestionTemplate := cfg.SpikeQuestionPromptTemplate
+	if spikeQuestionTemplate == "" {
+		spikeQuestionTemplate = getDefaultSpikeQuestionPrompt()
+	}
+
+	spikeTemplate := cfg.SpikePromptTemplate
+	if spikeTemplate == "" {
+		spikeTemplate = getDefaultSpikePrompt()
+	}
+
 	return &geminiClient{
-		apiKey:                    apiKey,
-		baseURL:                   fmt.Sprintf("https://generativelanguage.googleapis.com/v1/models/%s:generateContent", modelName),
-		client:                    &http.Client{},
-		questionPromptTemplate:    questionTemplate,
-		descriptionPromptTemplate: descriptionTemplate,
+		apiKey:                      apiKey,
+		baseURL:                     fmt.Sprintf("https://generativelanguage.googleapis.com/v1/models/%s:generateContent", modelName),
+		client:                      &http.Client{},
+		questionPromptTemplate:      questionTemplate,
+		descriptionPromptTemplate:   descriptionTemplate,
+		spikeQuestionPromptTemplate: spikeQuestionTemplate,
+		spikePromptTemplate:         spikeTemplate,
 	}, nil
 }
 
@@ -136,6 +150,17 @@ Context: {{context}}
 {{history}}
 
 Ask only ONE clear, concise question. Do not include any preamble or explanation, just the question.`
+}
+
+// getDefaultSpikeQuestionPrompt returns the default question generation prompt template for spikes
+func getDefaultSpikeQuestionPrompt() string {
+	return `You are helping to create a research spike ticket. Based on the following context and conversation history, ask ONE question to help constrain and focus the research area.
+
+Context: {{context}}
+
+{{history}}
+
+Ask only ONE clear, concise question that helps define the scope or boundaries of the research. Focus on understanding what needs to be investigated, not on dictating a solution. Do not include any preamble or explanation, just the question.`
 }
 
 // getDefaultDescriptionPrompt returns the default description generation prompt template
@@ -151,6 +176,33 @@ Write a professional Jira ticket description that includes:
 - Any relevant context or background
 - Expected outcomes or acceptance criteria if applicable
 Format it as plain text suitable for a Jira description field.`
+}
+
+// getDefaultSpikePrompt returns the default spike/research prompt template
+func getDefaultSpikePrompt() string {
+	return `You are helping to create a research spike description for a Jira ticket. Based on the following context and conversation history, write a clear, comprehensive research plan.
+
+Context: {{context}}
+
+{{history}}
+
+Write a professional research spike description that includes:
+- Research objectives and questions to answer
+- Areas to investigate
+- Expected deliverables and findings
+- Success criteria for the research
+Format it as plain text suitable for a Jira description field.`
+}
+
+// GetDefaultTemplates returns all default prompt templates in a map
+// This is useful for displaying defaults or initializing config
+func GetDefaultTemplates() map[string]string {
+	return map[string]string{
+		"question_prompt_template":       getDefaultQuestionPrompt(),
+		"description_prompt_template":    getDefaultDescriptionPrompt(),
+		"spike_question_prompt_template": getDefaultSpikeQuestionPrompt(),
+		"spike_prompt_template":          getDefaultSpikePrompt(),
+	}
 }
 
 // GeminiRequest represents the request payload
@@ -191,19 +243,21 @@ type ModelInfo struct {
 }
 
 // GenerateQuestion generates a clarifying question based on history and context
-func (c *geminiClient) GenerateQuestion(history []string, context string) (string, error) {
-	prompt := c.buildQuestionPrompt(history, context)
+func (c *geminiClient) GenerateQuestion(history []string, context string, issueType string) (string, error) {
+	prompt := c.buildQuestionPrompt(history, context, issueType)
 	return c.generateContent(prompt)
 }
 
 // GenerateDescription generates a description based on history and context
-func (c *geminiClient) GenerateDescription(history []string, context string) (string, error) {
-	prompt := c.buildDescriptionPrompt(history, context)
+// Uses spike prompt template if context indicates a spike (SPIKE prefix), otherwise uses normal template
+func (c *geminiClient) GenerateDescription(history []string, context string, issueType string) (string, error) {
+	prompt := c.buildDescriptionPrompt(history, context, issueType)
 	return c.generateContent(prompt)
 }
 
 // buildQuestionPrompt constructs the prompt for generating a question
-func (c *geminiClient) buildQuestionPrompt(history []string, context string) string {
+// Uses spike question template if the context indicates a spike (SPIKE prefix in summary/key)
+func (c *geminiClient) buildQuestionPrompt(history []string, context string, issueType string) string {
 	// Build history section
 	historySection := ""
 	if len(history) > 0 {
@@ -215,15 +269,30 @@ func (c *geminiClient) buildQuestionPrompt(history []string, context string) str
 		historySection = sb.String()
 	}
 
+	// Check if this is a spike based on context (summary) or issueType (which may be summary/key)
+	// The issueType parameter now contains the summary or key for spike detection
+	isSpike := IsSpike(context, "")
+	if !isSpike && issueType != "" {
+		// Check if the summary/key contains SPIKE
+		isSpike = IsSpike(issueType, "")
+	}
+
+	// Use spike question template for spikes, normal template for others
+	template := c.questionPromptTemplate
+	if isSpike {
+		template = c.spikeQuestionPromptTemplate
+	}
+
 	// Replace template placeholders
-	prompt := strings.ReplaceAll(c.questionPromptTemplate, "{{context}}", context)
+	prompt := strings.ReplaceAll(template, "{{context}}", context)
 	prompt = strings.ReplaceAll(prompt, "{{history}}", historySection)
 
 	return prompt
 }
 
 // buildDescriptionPrompt constructs the prompt for generating a description
-func (c *geminiClient) buildDescriptionPrompt(history []string, context string) string {
+// Uses spike prompt template if the context indicates a spike (SPIKE prefix in summary/key)
+func (c *geminiClient) buildDescriptionPrompt(history []string, context string, issueType string) string {
 	// Build history section
 	historySection := ""
 	if len(history) > 0 {
@@ -235,8 +304,22 @@ func (c *geminiClient) buildDescriptionPrompt(history []string, context string) 
 		historySection = sb.String()
 	}
 
+	// Check if this is a spike based on context (summary) or issueType (which may be summary/key)
+	// The issueType parameter now contains the summary or key for spike detection
+	isSpike := IsSpike(context, "")
+	if !isSpike && issueType != "" {
+		// Check if the summary/key contains SPIKE
+		isSpike = IsSpike(issueType, "")
+	}
+
+	// Use spike template for spikes, normal template for others
+	template := c.descriptionPromptTemplate
+	if isSpike {
+		template = c.spikePromptTemplate
+	}
+
 	// Replace template placeholders
-	prompt := strings.ReplaceAll(c.descriptionPromptTemplate, "{{context}}", context)
+	prompt := strings.ReplaceAll(template, "{{context}}", context)
 	prompt = strings.ReplaceAll(prompt, "{{history}}", historySection)
 
 	return prompt

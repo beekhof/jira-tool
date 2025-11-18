@@ -119,6 +119,9 @@ type Issue struct {
 		Status  struct {
 			Name string `json:"name"`
 		} `json:"status"`
+		IssueType struct {
+			Name string `json:"name"`
+		} `json:"issuetype"`
 		StoryPoints float64 `json:"customfield_10016"`
 	} `json:"fields"`
 }
@@ -821,7 +824,7 @@ func (c *jiraClient) SearchTickets(jql string) ([]Issue, error) {
 func (c *jiraClient) searchIssues(jql string) ([]Issue, error) {
 	endpoint, err := buildURL(c.baseURL, "/rest/api/2/search", map[string]string{
 		"jql":        jql,
-		"fields":     "summary,status,customfield_10016",
+		"fields":     "summary,status,issuetype,customfield_10016",
 		"maxResults": "1000",
 	})
 	if err != nil {

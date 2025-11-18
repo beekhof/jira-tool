@@ -11,7 +11,8 @@ import (
 // RunQAFlow runs the interactive Q&A flow with Gemini
 // It asks up to maxQuestions questions and then generates a final description
 // If maxQuestions is 0 or negative, defaults to 4
-func RunQAFlow(client gemini.GeminiClient, initialContext string, maxQuestions int) (string, error) {
+// summaryOrKey is used to detect spikes (tickets with "SPIKE" prefix) and select the appropriate prompt template
+func RunQAFlow(client gemini.GeminiClient, initialContext string, maxQuestions int, summaryOrKey string) (string, error) {
 	history := []string{}
 	reader := bufio.NewReader(os.Stdin)
 
@@ -23,7 +24,7 @@ func RunQAFlow(client gemini.GeminiClient, initialContext string, maxQuestions i
 	// Loop up to maxQuestions times
 	for i := 0; i < maxQuestions; i++ {
 		// Generate a question
-		question, err := client.GenerateQuestion(history, initialContext)
+		question, err := client.GenerateQuestion(history, initialContext, summaryOrKey)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate question: %w", err)
 		}
@@ -52,7 +53,7 @@ func RunQAFlow(client gemini.GeminiClient, initialContext string, maxQuestions i
 	}
 
 	// Generate the final description
-	description, err := client.GenerateDescription(history, initialContext)
+	description, err := client.GenerateDescription(history, initialContext, summaryOrKey)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate description: %w", err)
 	}
