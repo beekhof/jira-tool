@@ -8,11 +8,11 @@ import (
 	"go-jira-helper/pkg/gemini"
 )
 
-// RunQAFlow runs the interactive Q&A flow with Gemini
+// RunQnAFlow runs the interactive Q&A flow with Gemini
 // It asks up to maxQuestions questions and then generates a final description
 // If maxQuestions is 0 or negative, defaults to 4
 // summaryOrKey is used to detect spikes (tickets with "SPIKE" prefix) and select the appropriate prompt template
-func RunQAFlow(client gemini.GeminiClient, initialContext string, maxQuestions int, summaryOrKey string) (string, error) {
+func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions int, summaryOrKey string) (string, error) {
 	history := []string{}
 	reader := bufio.NewReader(os.Stdin)
 

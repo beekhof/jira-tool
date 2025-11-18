@@ -159,7 +159,7 @@ func runAccept(cmd *cobra.Command, args []string) error {
 	if err == nil && len(issues) > 0 {
 		ticketSummary = issues[0].Fields.Summary
 	}
-	
+
 	// Use epic summary from context to detect spike - if epic summary starts with SPIKE, treat as spike
 	// Also check original ticket summary if available
 	// Pass epic summary (from context) as the primary identifier, fallback to ticket summary
@@ -167,7 +167,7 @@ func runAccept(cmd *cobra.Command, args []string) error {
 	if ticketSummary != "" {
 		spikeIdentifier = ticketSummary
 	}
-	plan, err := qa.RunQAFlow(geminiClient, context, cfg.MaxQuestions, spikeIdentifier)
+	plan, err := qa.RunQnAFlow(geminiClient, context, cfg.MaxQuestions, spikeIdentifier)
 	if err != nil {
 		return err
 	}

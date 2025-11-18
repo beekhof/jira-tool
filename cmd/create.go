@@ -89,7 +89,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
-		
+
 		// Initialize Gemini client
 		geminiClient, err := gemini.NewClient(configDir)
 		if err != nil {
@@ -97,7 +97,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		}
 
 		// Run Q&A flow (pass summary to detect spike based on SPIKE prefix)
-		description, err := qa.RunQAFlow(geminiClient, summary, cfg.MaxQuestions, summary)
+		description, err := qa.RunQnAFlow(geminiClient, summary, cfg.MaxQuestions, summary)
 		if err != nil {
 			return err
 		}
