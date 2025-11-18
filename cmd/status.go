@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go-jira-helper/pkg/config"
+	"go-jira-helper/pkg/gemini"
 	"go-jira-helper/pkg/jira"
 
 	"github.com/spf13/cobra"
@@ -33,6 +34,13 @@ var releaseCmd = &cobra.Command{
 	Short: "Display release status",
 	Long:  `Display progress report for the current or next release.`,
 	RunE:  runReleaseStatus,
+}
+
+var spikesCmd = &cobra.Command{
+	Use:   "spikes",
+	Short: "Display spike tickets status",
+	Long:  `Display status report for spike tickets (tickets with "SPIKE" prefix in summary).`,
+	RunE:  runSpikesStatus,
 }
 
 func runSprintStatus(cmd *cobra.Command, args []string) error {
@@ -336,9 +344,127 @@ func runReleaseStatus(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func runSpikesStatus(cmd *cobra.Command, args []string) error {
+	configDir := GetConfigDir()
+	client, err := jira.NewClient(configDir)
+	if err != nil {
+		return err
+	}
+
+	// Load config to get default project
+	configPath := config.GetConfigPath(configDir)
+	cfg, err := config.LoadConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	projectKey := cfg.DefaultProject
+	if projectKey == "" {
+		return fmt.Errorf("default_project not configured. Please run 'jira init'")
+	}
+
+	// Search for spike tickets - summary contains "SPIKE" (case-insensitive)
+	// We'll filter to only those starting with "SPIKE" prefix
+	jql := fmt.Sprintf("project = %s AND summary ~ \"SPIKE\" ORDER BY status, updated DESC", projectKey)
+	allIssues, err := client.SearchTickets(jql)
+	if err != nil {
+		return fmt.Errorf("failed to search for spike tickets: %w", err)
+	}
+
+	// Filter to only tickets that start with "SPIKE" prefix (case-insensitive)
+	issues := []jira.Issue{}
+	for _, issue := range allIssues {
+		summary := issue.Fields.Summary
+		key := issue.Key
+		// Use IsSpike function to check if this is a spike ticket
+		if gemini.IsSpike(summary, key) {
+			issues = append(issues, issue)
+		}
+	}
+
+	if len(issues) == 0 {
+		fmt.Println("No spike tickets found.")
+		return nil
+	}
+
+	// Group by status
+	statusGroups := make(map[string][]jira.Issue)
+	for _, issue := range issues {
+		status := issue.Fields.Status.Name
+		statusGroups[status] = append(statusGroups[status], issue)
+	}
+
+	// Calculate stats
+	var todoPoints, inProgressPoints, donePoints float64
+	todoCount := 0
+	inProgressCount := 0
+	doneCount := 0
+
+	for _, issue := range issues {
+		points := issue.Fields.StoryPoints
+		status := issue.Fields.Status.Name
+
+		switch status {
+		case "To Do", "Open", "Backlog":
+			todoPoints += points
+			todoCount++
+		case "In Progress", "In Review", "Review":
+			inProgressPoints += points
+			inProgressCount++
+		case "Done", "Closed", "Resolved":
+			donePoints += points
+			doneCount++
+		}
+	}
+
+	totalPoints := todoPoints + inProgressPoints + donePoints
+	totalCount := len(issues)
+
+	// Print summary
+	fmt.Printf("Spike Tickets Summary\n")
+	fmt.Printf("Total: %d tickets (%.0f points)\n", totalCount, totalPoints)
+	fmt.Println("---")
+
+	// Print by status
+	statusOrder := []string{"To Do", "Open", "Backlog", "In Progress", "In Review", "Review", "Done", "Closed", "Resolved"}
+	for _, statusName := range statusOrder {
+		if issues, ok := statusGroups[statusName]; ok {
+			var points float64
+			for _, issue := range issues {
+				points += issue.Fields.StoryPoints
+			}
+			fmt.Printf("%s: %d tickets (%.0f points)\n", statusName, len(issues), points)
+		}
+	}
+
+	// Print detailed list
+	fmt.Println("\n---")
+	fmt.Println("Spike Tickets:")
+	fmt.Println()
+
+	// Sort status groups by the order above
+	for _, statusName := range statusOrder {
+		if issues, ok := statusGroups[statusName]; ok {
+			fmt.Printf("[%s]\n", statusName)
+			for _, issue := range issues {
+				points := issue.Fields.StoryPoints
+				if points > 0 {
+					fmt.Printf("  %s: %s (%.0f points)\n", issue.Key, issue.Fields.Summary, points)
+				} else {
+					fmt.Printf("  %s: %s\n", issue.Key, issue.Fields.Summary)
+				}
+			}
+			fmt.Println()
+		}
+	}
+
+	return nil
+}
+
 func init() {
 	statusCmd.AddCommand(sprintCmd)
 	statusCmd.AddCommand(releaseCmd)
+	statusCmd.AddCommand(spikesCmd)
 	sprintCmd.Flags().BoolVarP(&nextFlag, "next", "n", false, "Show next sprint/release instead of current")
 	releaseCmd.Flags().BoolVarP(&nextFlag, "next", "n", false, "Show next sprint/release instead of current")
 	rootCmd.AddCommand(statusCmd)

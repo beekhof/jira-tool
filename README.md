@@ -233,17 +233,23 @@ jira estimate ENG-123
 ```
 
 ### `status`
-Display status for sprints or releases.
+Display status for sprints, releases, or spike tickets.
 
 ```bash
 jira status sprint
 jira status sprint --next
 jira status release
 jira status release --next
+jira status spikes
 ```
 
+**Subcommands:**
+- `sprint`: Display sprint status with progress and burndown
+- `release`: Display release status with progress
+- `spikes`: Display all spike tickets grouped by status
+
 **Flags:**
-- `--next, -n`: Show next sprint/release instead of current
+- `--next, -n`: Show next sprint/release instead of current (only for sprint/release)
 
 ### `review`
 Review and triage tickets interactively.
