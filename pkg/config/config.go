@@ -13,6 +13,7 @@ type Config struct {
 	JiraURL           string   `yaml:"jira_url"`
 	DefaultProject    string   `yaml:"default_project"`
 	DefaultTaskType   string   `yaml:"default_task_type"`
+	GeminiModel       string   `yaml:"gemini_model,omitempty"`
 	FavoriteAssignees []string `yaml:"favorite_assignees,omitempty"`
 	FavoriteSprints   []string `yaml:"favorite_sprints,omitempty"`
 	FavoriteReleases  []string `yaml:"favorite_releases,omitempty"`

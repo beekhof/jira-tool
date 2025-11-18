@@ -77,6 +77,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		JiraURL:           jiraURL,
 		DefaultProject:    defaultProject,
 		DefaultTaskType:   defaultTaskType,
+		GeminiModel:       "gemini-2.5-flash", // Default to latest flash model
 		StoryPointOptions: []int{1, 2, 3, 5, 8, 13}, // Default Fibonacci sequence
 	}
 
