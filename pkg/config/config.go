@@ -20,14 +20,18 @@ type Config struct {
 	StoryPointOptions []int    `yaml:"story_point_options,omitempty"`
 }
 
-// GetConfigPath returns the default path for the config file
-func GetConfigPath() string {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		// Fallback to current directory if home dir cannot be determined
-		return "./.jira-helper/config.yaml"
+// GetConfigPath returns the path for the config file
+// If configDir is empty, uses the default ~/.jira-helper
+func GetConfigPath(configDir string) string {
+	if configDir == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			// Fallback to current directory if home dir cannot be determined
+			return "./.jira-helper/config.yaml"
+		}
+		configDir = filepath.Join(homeDir, ".jira-helper")
 	}
-	return filepath.Join(homeDir, ".jira-helper", "config.yaml")
+	return filepath.Join(configDir, "config.yaml")
 }
 
 // LoadConfig loads the configuration from the specified path

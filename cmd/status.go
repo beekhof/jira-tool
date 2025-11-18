@@ -36,7 +36,8 @@ var releaseCmd = &cobra.Command{
 }
 
 func runSprintStatus(cmd *cobra.Command, args []string) error {
-	client, err := jira.NewClient()
+	configDir := GetConfigDir()
+	client, err := jira.NewClient(configDir)
 	if err != nil {
 		return err
 	}
@@ -187,13 +188,14 @@ func runSprintStatus(cmd *cobra.Command, args []string) error {
 }
 
 func runReleaseStatus(cmd *cobra.Command, args []string) error {
-	client, err := jira.NewClient()
+	configDir := GetConfigDir()
+	client, err := jira.NewClient(configDir)
 	if err != nil {
 		return err
 	}
 
 	// Load config to get default project
-	configPath := config.GetConfigPath()
+	configPath := config.GetConfigPath(configDir)
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)

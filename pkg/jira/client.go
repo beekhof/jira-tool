@@ -146,8 +146,9 @@ type jiraClient struct {
 }
 
 // NewClient creates a new Jira client by loading config and credentials
-func NewClient() (JiraClient, error) {
-	configPath := config.GetConfigPath()
+// configDir can be empty to use the default ~/.jira-helper
+func NewClient(configDir string) (JiraClient, error) {
+	configPath := config.GetConfigPath(configDir)
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
@@ -161,13 +162,13 @@ func NewClient() (JiraClient, error) {
 		return nil, fmt.Errorf("jira_user not configured. Please run 'jira init'")
 	}
 
-	token, err := credentials.GetSecret(credentials.JiraServiceKey, cfg.JiraUser)
+	token, err := credentials.GetSecret(credentials.JiraServiceKey, cfg.JiraUser, configDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Jira token: %w", err)
 	}
 
 	// Load cache
-	cachePath := GetCachePath()
+	cachePath := GetCachePath(configDir)
 	cache := NewCache(cachePath)
 	if err := cache.Load(); err != nil {
 		// Log error but continue - cache is optional

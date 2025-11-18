@@ -14,14 +14,18 @@ type Credentials struct {
 	GeminiKey string `yaml:"gemini_key"`
 }
 
-// GetCredentialsPath returns the default path for the credentials file
-func GetCredentialsPath() string {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		// Fallback to current directory if home dir cannot be determined
-		return "./.jira-helper/credentials.yaml"
+// GetCredentialsPath returns the path for the credentials file
+// If configDir is empty, uses the default ~/.jira-helper
+func GetCredentialsPath(configDir string) string {
+	if configDir == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			// Fallback to current directory if home dir cannot be determined
+			return "./.jira-helper/credentials.yaml"
+		}
+		configDir = filepath.Join(homeDir, ".jira-helper")
 	}
-	return filepath.Join(homeDir, ".jira-helper", "credentials.yaml")
+	return filepath.Join(configDir, "credentials.yaml")
 }
 
 // LoadCredentials loads credentials from the specified path
@@ -62,8 +66,9 @@ func SaveCredentials(creds *Credentials, path string) error {
 
 // StoreSecret stores a secret in the credentials file
 // For backward compatibility with the old keyring interface
-func StoreSecret(service, user, secret string) error {
-	path := GetCredentialsPath()
+// Note: This function now requires configDir to be passed via GetCredentialsPath
+func StoreSecret(service, user, secret, configDir string) error {
+	path := GetCredentialsPath(configDir)
 
 	// Try to load existing credentials, or create new
 	creds, err := LoadCredentials(path)
@@ -86,8 +91,9 @@ func StoreSecret(service, user, secret string) error {
 
 // GetSecret retrieves a secret from the credentials file
 // For backward compatibility with the old keyring interface
-func GetSecret(service, user string) (string, error) {
-	path := GetCredentialsPath()
+// Note: This function now requires configDir to be passed via GetCredentialsPath
+func GetSecret(service, user, configDir string) (string, error) {
+	path := GetCredentialsPath(configDir)
 
 	creds, err := LoadCredentials(path)
 	if err != nil {

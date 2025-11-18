@@ -17,7 +17,8 @@ var refreshCmd = &cobra.Command{
 }
 
 func runRefresh(cmd *cobra.Command, args []string) error {
-	cachePath := jira.GetCachePath()
+	configDir := GetConfigDir()
+	cachePath := jira.GetCachePath(configDir)
 
 	// Check if cache file exists
 	if _, err := os.Stat(cachePath); os.IsNotExist(err) {

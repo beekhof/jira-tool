@@ -29,13 +29,14 @@ with decomposed sub-tasks. The ticket will be transitioned to "Done" status.`,
 func runAccept(cmd *cobra.Command, args []string) error {
 	ticketID := args[0]
 
-	client, err := jira.NewClient()
+	configDir := GetConfigDir()
+	client, err := jira.NewClient(configDir)
 	if err != nil {
 		return err
 	}
 
 	// Load config
-	configPath := config.GetConfigPath()
+	configPath := config.GetConfigPath(configDir)
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -147,7 +148,7 @@ func runAccept(cmd *cobra.Command, args []string) error {
 	context := fmt.Sprintf("Epic Summary: %s\n\nResearch Text:\n%s", epicSummary, selectedSource.Text)
 
 	// Run Q&A flow
-	geminiClient, err := gemini.NewClient()
+	geminiClient, err := gemini.NewClient(configDir)
 	if err != nil {
 		return err
 	}

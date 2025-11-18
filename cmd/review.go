@@ -32,13 +32,14 @@ or review a queue of tickets based on filters.`,
 }
 
 func runReview(cmd *cobra.Command, args []string) error {
-	client, err := jira.NewClient()
+	configDir := GetConfigDir()
+	client, err := jira.NewClient(configDir)
 	if err != nil {
 		return err
 	}
 
 	// Load config
-	configPath := config.GetConfigPath()
+	configPath := config.GetConfigPath(configDir)
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -255,7 +256,8 @@ func handleTriage(client jira.JiraClient, reader *bufio.Reader, ticketID string)
 }
 
 func handleDetail(client jira.JiraClient, reader *bufio.Reader, ticketID, summary string) error {
-	geminiClient, err := gemini.NewClient()
+	configDir := GetConfigDir()
+	geminiClient, err := gemini.NewClient(configDir)
 	if err != nil {
 		return err
 	}

@@ -85,17 +85,18 @@ func runInit(cmd *cobra.Command, args []string) error {
 		StoryPointOptions: []int{1, 2, 3, 5, 8, 13}, // Default Fibonacci sequence
 	}
 
-	configPath := config.GetConfigPath()
+	configDir := GetConfigDir()
+	configPath := config.GetConfigPath(configDir)
 	if err := config.SaveConfig(cfg, configPath); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
 	// Store API keys in credentials file
-	if err := credentials.StoreSecret(credentials.JiraServiceKey, jiraUser, jiraToken); err != nil {
+	if err := credentials.StoreSecret(credentials.JiraServiceKey, jiraUser, jiraToken, configDir); err != nil {
 		return fmt.Errorf("failed to store Jira token: %w", err)
 	}
 
-	if err := credentials.StoreSecret(credentials.GeminiServiceKey, jiraUser, geminiKey); err != nil {
+	if err := credentials.StoreSecret(credentials.GeminiServiceKey, jiraUser, geminiKey, configDir); err != nil {
 		return fmt.Errorf("failed to store Gemini key: %w", err)
 	}
 

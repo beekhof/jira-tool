@@ -62,14 +62,15 @@ func TestStoreAndGetSecret(t *testing.T) {
 		t.Fatalf("Failed to save credentials: %v", err)
 	}
 
-	// Manually test StoreSecret
-	if err := StoreSecret(JiraServiceKey, "test@example.com", "jira-token-123"); err != nil {
+	// Manually test StoreSecret with temp directory
+	configDir := tmpDir
+	if err := StoreSecret(JiraServiceKey, "test@example.com", "jira-token-123", configDir); err != nil {
 		t.Fatalf("Failed to store Jira secret: %v", err)
 	}
 
 	// For GetSecret, we need to test with the actual path
 	// Since GetSecret uses GetCredentialsPath(), we'll test the underlying functions
-	loaded, err := LoadCredentials(GetCredentialsPath())
+	loaded, err := LoadCredentials(GetCredentialsPath(""))
 	if err != nil {
 		// This is expected if credentials file doesn't exist in test environment
 		t.Logf("Could not load credentials from default path (expected in test): %v", err)

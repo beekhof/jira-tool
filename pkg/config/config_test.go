@@ -76,12 +76,20 @@ func TestSaveConfig(t *testing.T) {
 }
 
 func TestGetConfigPath(t *testing.T) {
-	path := GetConfigPath()
+	// Test with empty configDir (should use default)
+	path := GetConfigPath("")
 	if path == "" {
 		t.Fatal("GetConfigPath returned empty string")
 	}
 	// Should end with config.yaml
 	if filepath.Base(path) != "config.yaml" {
 		t.Errorf("Expected config path to end with config.yaml, got %s", path)
+	}
+
+	// Test with custom configDir
+	customPath := GetConfigPath("/custom/path")
+	expected := filepath.Join("/custom/path", "config.yaml")
+	if customPath != expected {
+		t.Errorf("Expected config path %s, got %s", expected, customPath)
 	}
 }

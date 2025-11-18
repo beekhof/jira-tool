@@ -32,8 +32,11 @@ The project and type can be specified via flags, otherwise defaults from config 
 func runCreate(cmd *cobra.Command, args []string) error {
 	summary := args[0]
 
+	// Get config directory
+	configDir := GetConfigDir()
+
 	// Load config to get defaults
-	configPath := config.GetConfigPath()
+	configPath := config.GetConfigPath(configDir)
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -57,7 +60,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create Jira client
-	client, err := jira.NewClient()
+	client, err := jira.NewClient(configDir)
 	if err != nil {
 		return err
 	}
@@ -81,7 +84,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 
 	if response == "y" || response == "yes" {
 		// Initialize Gemini client
-		geminiClient, err := gemini.NewClient()
+		geminiClient, err := gemini.NewClient(configDir)
 		if err != nil {
 			return err
 		}

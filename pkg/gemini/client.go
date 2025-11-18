@@ -25,10 +25,11 @@ type geminiClient struct {
 }
 
 // NewClient creates a new Gemini client
-func NewClient() (GeminiClient, error) {
+// configDir can be empty to use the default ~/.jira-helper
+func NewClient(configDir string) (GeminiClient, error) {
 	// Get API key from credentials
 	// We use a dummy user since we store by service, not user
-	apiKey, err := credentials.GetSecret(credentials.GeminiServiceKey, "default")
+	apiKey, err := credentials.GetSecret(credentials.GeminiServiceKey, "default", configDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Gemini API key: %w. Please run 'jira init'", err)
 	}
