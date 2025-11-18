@@ -78,6 +78,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		DefaultProject:    defaultProject,
 		DefaultTaskType:   defaultTaskType,
 		GeminiModel:       "gemini-2.5-flash", // Default to latest flash model
+		MaxQuestions:      4,                  // Default to 4 questions
 		StoryPointOptions: []int{1, 2, 3, 5, 8, 13}, // Default Fibonacci sequence
 	}
 

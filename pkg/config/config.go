@@ -14,6 +14,7 @@ type Config struct {
 	DefaultProject    string   `yaml:"default_project"`
 	DefaultTaskType   string   `yaml:"default_task_type"`
 	GeminiModel       string   `yaml:"gemini_model,omitempty"`
+	MaxQuestions      int      `yaml:"max_questions,omitempty"`
 	FavoriteAssignees []string `yaml:"favorite_assignees,omitempty"`
 	FavoriteSprints   []string `yaml:"favorite_sprints,omitempty"`
 	FavoriteReleases  []string `yaml:"favorite_releases,omitempty"`

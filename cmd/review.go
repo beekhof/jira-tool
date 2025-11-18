@@ -257,13 +257,21 @@ func handleTriage(client jira.JiraClient, reader *bufio.Reader, ticketID string)
 
 func handleDetail(client jira.JiraClient, reader *bufio.Reader, ticketID, summary string) error {
 	configDir := GetConfigDir()
+	
+	// Load config to get max questions
+	configPath := config.GetConfigPath(configDir)
+	cfg, err := config.LoadConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+	
 	geminiClient, err := gemini.NewClient(configDir)
 	if err != nil {
 		return err
 	}
 
 	// Run Q&A flow
-	description, err := qa.RunQAFlow(geminiClient, summary)
+	description, err := qa.RunQAFlow(geminiClient, summary, cfg.MaxQuestions)
 	if err != nil {
 		return err
 	}

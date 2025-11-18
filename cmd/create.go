@@ -83,6 +83,13 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	response = strings.TrimSpace(strings.ToLower(response))
 
 	if response == "y" || response == "yes" {
+		// Load config to get max questions
+		configPath := config.GetConfigPath(configDir)
+		cfg, err := config.LoadConfig(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+		
 		// Initialize Gemini client
 		geminiClient, err := gemini.NewClient(configDir)
 		if err != nil {
@@ -90,7 +97,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		}
 
 		// Run Q&A flow
-		description, err := qa.RunQAFlow(geminiClient, summary)
+		description, err := qa.RunQAFlow(geminiClient, summary, cfg.MaxQuestions)
 		if err != nil {
 			return err
 		}

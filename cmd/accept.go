@@ -147,13 +147,13 @@ func runAccept(cmd *cobra.Command, args []string) error {
 	// Build context for Gemini
 	context := fmt.Sprintf("Epic Summary: %s\n\nResearch Text:\n%s", epicSummary, selectedSource.Text)
 
-	// Run Q&A flow
+	// Run Q&A flow (cfg already loaded above)
 	geminiClient, err := gemini.NewClient(configDir)
 	if err != nil {
 		return err
 	}
 
-	plan, err := qa.RunQAFlow(geminiClient, context)
+	plan, err := qa.RunQAFlow(geminiClient, context, cfg.MaxQuestions)
 	if err != nil {
 		return err
 	}

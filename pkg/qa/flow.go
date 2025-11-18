@@ -9,13 +9,19 @@ import (
 )
 
 // RunQAFlow runs the interactive Q&A flow with Gemini
-// It asks up to 4 questions and then generates a final description
-func RunQAFlow(client gemini.GeminiClient, initialContext string) (string, error) {
+// It asks up to maxQuestions questions and then generates a final description
+// If maxQuestions is 0 or negative, defaults to 4
+func RunQAFlow(client gemini.GeminiClient, initialContext string, maxQuestions int) (string, error) {
 	history := []string{}
 	reader := bufio.NewReader(os.Stdin)
 
-	// Loop up to 4 times
-	for i := 0; i < 4; i++ {
+	// Default to 4 if not specified
+	if maxQuestions <= 0 {
+		maxQuestions = 4
+	}
+
+	// Loop up to maxQuestions times
+	for i := 0; i < maxQuestions; i++ {
 		// Generate a question
 		question, err := client.GenerateQuestion(history, initialContext)
 		if err != nil {
