@@ -23,6 +23,10 @@ var initCmd = &cobra.Command{
 	RunE: runInit,
 }
 
+func init() {
+	rootCmd.AddCommand(initCmd)
+}
+
 func runInit(cmd *cobra.Command, args []string) error {
 	reader := bufio.NewReader(os.Stdin)
 

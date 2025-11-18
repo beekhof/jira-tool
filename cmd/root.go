@@ -37,11 +37,5 @@ func GetConfigDir() string {
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&configDir, "config-dir", "", "Configuration directory (default: ~/.jira-tool)")
-	rootCmd.AddCommand(initCmd)
-	rootCmd.AddCommand(estimateCmd)
-	rootCmd.AddCommand(statusCmd)
-	rootCmd.AddCommand(createCmd)
-	rootCmd.AddCommand(reviewCmd)
-	rootCmd.AddCommand(acceptCmd)
-	rootCmd.AddCommand(refreshCmd)
+	// Commands register themselves in their own init() functions
 }
