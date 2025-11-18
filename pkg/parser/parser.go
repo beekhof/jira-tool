@@ -30,11 +30,11 @@ func ParseEpicPlan(markdown string) (Epic, []Task, error) {
 	var tasks []Task
 
 	lines := strings.Split(markdown, "\n")
-	
+
 	// Find epic title
 	epicTitleRegex := regexp.MustCompile(`^#\s*EPIC:\s*(.+)$`)
 	epicDescStart := -1
-	
+
 	for i, line := range lines {
 		if matches := epicTitleRegex.FindStringSubmatch(line); matches != nil {
 			epic.Title = strings.TrimSpace(matches[1])
@@ -42,15 +42,15 @@ func ParseEpicPlan(markdown string) (Epic, []Task, error) {
 			break
 		}
 	}
-	
+
 	if epic.Title == "" {
 		return epic, tasks, fmt.Errorf("epic title not found. Expected format: # EPIC: Title")
 	}
-	
+
 	// Find tasks section
 	tasksStart := -1
 	tasksRegex := regexp.MustCompile(`^##\s*TASKS`)
-	
+
 	for i := epicDescStart; i < len(lines); i++ {
 		if tasksRegex.MatchString(lines[i]) {
 			tasksStart = i + 1
@@ -64,22 +64,22 @@ func ParseEpicPlan(markdown string) (Epic, []Task, error) {
 			}
 		}
 	}
-	
+
 	epic.Description = strings.TrimSpace(epic.Description)
-	
+
 	// Parse tasks
 	if tasksStart == -1 {
 		return epic, tasks, fmt.Errorf("TASKS section not found. Expected format: ## TASKS")
 	}
-	
+
 	taskRegex := regexp.MustCompile(`^-\s*\[[ xX]\]\s*(.+)$`)
-	
+
 	for i := tasksStart; i < len(lines); i++ {
 		line := strings.TrimSpace(lines[i])
 		if line == "" {
 			continue
 		}
-		
+
 		if matches := taskRegex.FindStringSubmatch(line); matches != nil {
 			tasks = append(tasks, Task{
 				Summary: strings.TrimSpace(matches[1]),
@@ -95,11 +95,10 @@ func ParseEpicPlan(markdown string) (Epic, []Task, error) {
 			}
 		}
 	}
-	
+
 	if len(tasks) == 0 {
 		return epic, tasks, fmt.Errorf("no tasks found in TASKS section")
 	}
-	
+
 	return epic, tasks, nil
 }
-

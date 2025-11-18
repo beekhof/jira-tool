@@ -78,10 +78,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Save non-sensitive config
 	cfg := &config.Config{
-		JiraURL:         jiraURL,
-		JiraUser:        jiraUser,
-		DefaultProject:  defaultProject,
-		DefaultTaskType: defaultTaskType,
+		JiraURL:           jiraURL,
+		JiraUser:          jiraUser,
+		DefaultProject:    defaultProject,
+		DefaultTaskType:   defaultTaskType,
 		StoryPointOptions: []int{1, 2, 3, 5, 8, 13}, // Default Fibonacci sequence
 	}
 
@@ -102,4 +102,3 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println("Configuration saved successfully!")
 	return nil
 }
-

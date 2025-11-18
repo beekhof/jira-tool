@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"go-jira-helper/pkg/jira"
 	"testing"
 )
 
@@ -14,12 +13,12 @@ func TestCreateCommand(t *testing.T) {
 	// 1. Mocking config.LoadConfig
 	// 2. Mocking jira.NewClient
 	// 3. Verifying CreateTicket is called with correct arguments
-	
+
 	// For now, we verify the command exists and has the right structure
 	if createCmd == nil {
 		t.Error("createCmd is nil")
 	}
-	
+
 	if createCmd.Use != "create [SUMMARY]" {
 		t.Errorf("Expected use 'create [SUMMARY]', got '%s'", createCmd.Use)
 	}
@@ -37,4 +36,3 @@ func (m *MockJiraClientForCreate) CreateTicket(project, taskType, summary string
 	}
 	return "ENG-123", nil
 }
-

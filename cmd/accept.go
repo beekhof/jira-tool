@@ -369,4 +369,3 @@ func runAccept(cmd *cobra.Command, args []string) error {
 func init() {
 	rootCmd.AddCommand(acceptCmd)
 }
-

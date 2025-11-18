@@ -99,4 +99,3 @@ func runEstimate(cmd *cobra.Command, args []string) error {
 func init() {
 	rootCmd.AddCommand(estimateCmd)
 }
-

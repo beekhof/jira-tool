@@ -48,10 +48,10 @@ func TestSaveConfig(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	testConfig := &Config{
-		JiraURL:         "https://test.atlassian.net",
-		JiraUser:        "test@example.com",
-		DefaultProject:  "TEST",
-		DefaultTaskType: "Task",
+		JiraURL:           "https://test.atlassian.net",
+		JiraUser:          "test@example.com",
+		DefaultProject:    "TEST",
+		DefaultTaskType:   "Task",
 		StoryPointOptions: []int{1, 2, 3, 5, 8, 13},
 	}
 
@@ -85,4 +85,3 @@ func TestGetConfigPath(t *testing.T) {
 		t.Errorf("Expected config path to end with config.yaml, got %s", path)
 	}
 }
-

@@ -13,4 +13,3 @@ func TestRootCommand(t *testing.T) {
 		t.Errorf("Expected root command use to be 'jira', got '%s'", rootCmd.Use)
 	}
 }
-

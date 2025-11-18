@@ -74,18 +74,17 @@ func GetEditorPath() (string, error) {
 		}
 		return "", fmt.Errorf("no editor found. Please set EDITOR environment variable")
 	}
-	
+
 	// If editor is a full path, return it
 	if filepath.IsAbs(editor) {
 		return editor, nil
 	}
-	
+
 	// Otherwise, look it up in PATH
 	path, err := exec.LookPath(editor)
 	if err != nil {
 		return "", fmt.Errorf("editor '%s' not found in PATH: %w", editor, err)
 	}
-	
+
 	return path, nil
 }
-

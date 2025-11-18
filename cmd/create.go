@@ -132,4 +132,3 @@ func init() {
 	createCmd.Flags().StringVarP(&typeFlag, "type", "t", "", "Task type (overrides default_task_type)")
 	rootCmd.AddCommand(createCmd)
 }
-

@@ -47,9 +47,9 @@ type Attachment struct {
 
 // Comment represents a Jira comment
 type Comment struct {
-	ID      string `json:"id"`
-	Body    string `json:"body"`
-	Author  struct {
+	ID     string `json:"id"`
+	Body   string `json:"body"`
+	Author struct {
 		DisplayName string `json:"displayName"`
 	} `json:"author"`
 	Created string `json:"created"`
@@ -66,8 +66,8 @@ type Transition struct {
 
 // User represents a Jira user
 type User struct {
-	AccountID   string `json:"accountId"`
-	DisplayName string `json:"displayName"`
+	AccountID    string `json:"accountId"`
+	DisplayName  string `json:"displayName"`
 	EmailAddress string `json:"emailAddress"`
 }
 
@@ -115,8 +115,8 @@ type ReleaseParsed struct {
 type Issue struct {
 	Key    string `json:"key"`
 	Fields struct {
-		Summary     string `json:"summary"`
-		Status      struct {
+		Summary string `json:"summary"`
+		Status  struct {
 			Name string `json:"name"`
 		} `json:"status"`
 		StoryPoints float64 `json:"customfield_10016"`
@@ -301,7 +301,7 @@ func (c *jiraClient) CreateTicket(project, taskType, summary string) (string, er
 			"project": map[string]interface{}{
 				"key": project,
 			},
-			"summary":     summary,
+			"summary": summary,
 			"issuetype": map[string]interface{}{
 				"name": taskType,
 			},
@@ -1103,4 +1103,3 @@ func (c *jiraClient) UpdateTicketPriority(ticketID, priorityID string) error {
 
 	return nil
 }
-

@@ -37,4 +37,3 @@ func runRefresh(cmd *cobra.Command, args []string) error {
 func init() {
 	rootCmd.AddCommand(refreshCmd)
 }
-

@@ -341,4 +341,3 @@ func init() {
 	releaseCmd.Flags().BoolVarP(&nextFlag, "next", "n", false, "Show next sprint/release instead of current")
 	rootCmd.AddCommand(statusCmd)
 }
-

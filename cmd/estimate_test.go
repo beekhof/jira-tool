@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"bytes"
-	"go-jira-helper/pkg/jira"
 	"testing"
 )
 
@@ -46,4 +44,3 @@ func TestEstimateCommand(t *testing.T) {
 // 1. Refactor jira.NewClient() to accept an optional client parameter
 // 2. Or create a test helper that mocks the keyring and config
 // 3. Or use a build tag to swap implementations
-

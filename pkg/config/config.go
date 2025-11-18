@@ -10,14 +10,14 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	JiraURL         string   `yaml:"jira_url"`
-	JiraUser        string   `yaml:"jira_user"`
-	DefaultProject  string   `yaml:"default_project"`
-	DefaultTaskType string   `yaml:"default_task_type"`
+	JiraURL           string   `yaml:"jira_url"`
+	JiraUser          string   `yaml:"jira_user"`
+	DefaultProject    string   `yaml:"default_project"`
+	DefaultTaskType   string   `yaml:"default_task_type"`
 	FavoriteAssignees []string `yaml:"favorite_assignees,omitempty"`
-	FavoriteSprints  []string `yaml:"favorite_sprints,omitempty"`
-	FavoriteReleases []string `yaml:"favorite_releases,omitempty"`
-	StoryPointOptions []int   `yaml:"story_point_options,omitempty"`
+	FavoriteSprints   []string `yaml:"favorite_sprints,omitempty"`
+	FavoriteReleases  []string `yaml:"favorite_releases,omitempty"`
+	StoryPointOptions []int    `yaml:"story_point_options,omitempty"`
 }
 
 // GetConfigPath returns the default path for the config file
@@ -64,4 +64,3 @@ func SaveConfig(cfg *Config, path string) error {
 
 	return nil
 }
-

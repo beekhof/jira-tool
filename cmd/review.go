@@ -350,4 +350,3 @@ func init() {
 	reviewCmd.Flags().BoolVar(&untriagedFlag, "untriaged", false, "Show only untriaged tickets")
 	rootCmd.AddCommand(reviewCmd)
 }
-

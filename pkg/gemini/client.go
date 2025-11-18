@@ -80,14 +80,14 @@ func (c *geminiClient) GenerateDescription(history []string, context string) (st
 // buildQuestionPrompt constructs the prompt for generating a question
 func (c *geminiClient) buildQuestionPrompt(history []string, context string) string {
 	var sb strings.Builder
-	
+
 	sb.WriteString("You are helping to create a Jira ticket. ")
 	sb.WriteString("Based on the following context and conversation history, ask ONE clarifying question to better understand what needs to be done.\n\n")
-	
+
 	sb.WriteString("Context: ")
 	sb.WriteString(context)
 	sb.WriteString("\n\n")
-	
+
 	if len(history) > 0 {
 		sb.WriteString("Conversation history:\n")
 		for i, entry := range history {
@@ -95,23 +95,23 @@ func (c *geminiClient) buildQuestionPrompt(history []string, context string) str
 		}
 		sb.WriteString("\n")
 	}
-	
+
 	sb.WriteString("Ask only ONE clear, concise question. Do not include any preamble or explanation, just the question.")
-	
+
 	return sb.String()
 }
 
 // buildDescriptionPrompt constructs the prompt for generating a description
 func (c *geminiClient) buildDescriptionPrompt(history []string, context string) string {
 	var sb strings.Builder
-	
+
 	sb.WriteString("You are helping to create a Jira ticket description. ")
 	sb.WriteString("Based on the following context and conversation history, write a clear, comprehensive Jira ticket description.\n\n")
-	
+
 	sb.WriteString("Context: ")
 	sb.WriteString(context)
 	sb.WriteString("\n\n")
-	
+
 	if len(history) > 0 {
 		sb.WriteString("Conversation history:\n")
 		for i, entry := range history {
@@ -119,13 +119,13 @@ func (c *geminiClient) buildDescriptionPrompt(history []string, context string) 
 		}
 		sb.WriteString("\n")
 	}
-	
+
 	sb.WriteString("Write a professional Jira ticket description that includes:\n")
 	sb.WriteString("- Clear explanation of what needs to be done\n")
 	sb.WriteString("- Any relevant context or background\n")
 	sb.WriteString("- Expected outcomes or acceptance criteria if applicable\n")
 	sb.WriteString("Format it as plain text suitable for a Jira description field.")
-	
+
 	return sb.String()
 }
 
@@ -194,4 +194,3 @@ func (c *geminiClient) generateContent(prompt string) (string, error) {
 
 	return geminiResp.Candidates[0].Content.Parts[0].Text, nil
 }
-

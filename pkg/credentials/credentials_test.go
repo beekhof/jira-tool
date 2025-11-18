@@ -27,7 +27,7 @@ func TestSaveAndLoadCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Credentials file not found: %v", err)
 	}
-	
+
 	// Check permissions (should be 0600)
 	if info.Mode().Perm() != 0600 {
 		t.Errorf("Expected file permissions 0600, got %o", info.Mode().Perm())
@@ -86,7 +86,7 @@ func TestStoreAndGetSecret(t *testing.T) {
 	if loaded2.GeminiKey != "gemini-key-456" {
 		t.Errorf("Expected Gemini key 'gemini-key-456', got '%s'", loaded2.GeminiKey)
 	}
-	
+
 	_ = loaded // Suppress unused variable warning
 }
 
@@ -100,4 +100,3 @@ func TestGetSecret_NotFound(t *testing.T) {
 		t.Error("Expected error for non-existent credentials file, got nil")
 	}
 }
-

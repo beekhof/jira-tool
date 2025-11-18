@@ -10,8 +10,8 @@ import (
 
 // Credentials holds API keys and tokens
 type Credentials struct {
-	JiraToken  string `yaml:"jira_token"`
-	GeminiKey  string `yaml:"gemini_key"`
+	JiraToken string `yaml:"jira_token"`
+	GeminiKey string `yaml:"gemini_key"`
 }
 
 // GetCredentialsPath returns the default path for the credentials file
@@ -64,7 +64,7 @@ func SaveCredentials(creds *Credentials, path string) error {
 // For backward compatibility with the old keyring interface
 func StoreSecret(service, user, secret string) error {
 	path := GetCredentialsPath()
-	
+
 	// Try to load existing credentials, or create new
 	creds, err := LoadCredentials(path)
 	if err != nil {
@@ -88,7 +88,7 @@ func StoreSecret(service, user, secret string) error {
 // For backward compatibility with the old keyring interface
 func GetSecret(service, user string) (string, error) {
 	path := GetCredentialsPath()
-	
+
 	creds, err := LoadCredentials(path)
 	if err != nil {
 		return "", fmt.Errorf("failed to load credentials: %w. Please run 'jira init'", err)
@@ -114,4 +114,3 @@ const (
 	JiraServiceKey   = "jira-helper-jira"
 	GeminiServiceKey = "jira-helper-gemini"
 )
-
