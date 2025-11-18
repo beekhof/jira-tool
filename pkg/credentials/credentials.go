@@ -1,0 +1,117 @@
+package credentials
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Credentials holds API keys and tokens
+type Credentials struct {
+	JiraToken  string `yaml:"jira_token"`
+	GeminiKey  string `yaml:"gemini_key"`
+}
+
+// GetCredentialsPath returns the default path for the credentials file
+func GetCredentialsPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		// Fallback to current directory if home dir cannot be determined
+		return "./.jira-helper/credentials.yaml"
+	}
+	return filepath.Join(homeDir, ".jira-helper", "credentials.yaml")
+}
+
+// LoadCredentials loads credentials from the specified path
+func LoadCredentials(path string) (*Credentials, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read credentials file: %w", err)
+	}
+
+	var creds Credentials
+	if err := yaml.Unmarshal(data, &creds); err != nil {
+		return nil, fmt.Errorf("failed to parse credentials file: %w", err)
+	}
+
+	return &creds, nil
+}
+
+// SaveCredentials saves credentials to the specified path
+func SaveCredentials(creds *Credentials, path string) error {
+	// Create directory if it doesn't exist
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("failed to create credentials directory: %w", err)
+	}
+
+	data, err := yaml.Marshal(creds)
+	if err != nil {
+		return fmt.Errorf("failed to marshal credentials: %w", err)
+	}
+
+	// Write with restricted permissions (owner read/write only)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("failed to write credentials file: %w", err)
+	}
+
+	return nil
+}
+
+// StoreSecret stores a secret in the credentials file
+// For backward compatibility with the old keyring interface
+func StoreSecret(service, user, secret string) error {
+	path := GetCredentialsPath()
+	
+	// Try to load existing credentials, or create new
+	creds, err := LoadCredentials(path)
+	if err != nil {
+		// File doesn't exist, create new
+		creds = &Credentials{}
+	}
+
+	// Store based on service type
+	if service == "jira-helper-jira" {
+		creds.JiraToken = secret
+	} else if service == "jira-helper-gemini" {
+		creds.GeminiKey = secret
+	} else {
+		return fmt.Errorf("unknown service: %s", service)
+	}
+
+	return SaveCredentials(creds, path)
+}
+
+// GetSecret retrieves a secret from the credentials file
+// For backward compatibility with the old keyring interface
+func GetSecret(service, user string) (string, error) {
+	path := GetCredentialsPath()
+	
+	creds, err := LoadCredentials(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to load credentials: %w. Please run 'jira init'", err)
+	}
+
+	if service == "jira-helper-jira" {
+		if creds.JiraToken == "" {
+			return "", fmt.Errorf("Jira token not found. Please run 'jira init'")
+		}
+		return creds.JiraToken, nil
+	} else if service == "jira-helper-gemini" {
+		if creds.GeminiKey == "" {
+			return "", fmt.Errorf("Gemini key not found. Please run 'jira init'")
+		}
+		return creds.GeminiKey, nil
+	}
+
+	return "", fmt.Errorf("unknown service: %s", service)
+}
+
+// Constants for backward compatibility
+const (
+	JiraServiceKey   = "jira-helper-jira"
+	GeminiServiceKey = "jira-helper-gemini"
+)
+
