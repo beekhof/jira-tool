@@ -55,6 +55,6 @@ func indentYAML(s string) string {
 }
 
 func init() {
-	rootCmd.AddCommand(templatesCmd)
+	utilsCmd.AddCommand(templatesCmd)
 }
 

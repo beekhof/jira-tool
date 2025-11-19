@@ -1075,7 +1075,6 @@ func (c *jiraClient) SearchUsers(query string) ([]User, error) {
 		return nil, fmt.Errorf("failed to parse response: %w (response: %s)", err, bodyStr)
 	}
 
-
 	// Normalize AccountID - use alternative fields if accountId is empty
 	// Also try to extract from raw JSON if standard fields don't work
 	for i := range users {

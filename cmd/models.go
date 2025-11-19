@@ -48,6 +48,6 @@ func runModels(cmd *cobra.Command, args []string) error {
 }
 
 func init() {
-	rootCmd.AddCommand(modelsCmd)
+	utilsCmd.AddCommand(modelsCmd)
 }
 
