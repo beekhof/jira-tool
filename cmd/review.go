@@ -99,54 +99,193 @@ func runReview(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Get page size from config (default 10)
+	pageSize := cfg.ReviewPageSize
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+
 	reader := bufio.NewReader(os.Stdin)
+	
+	// Track acted-on tickets
+	actedOn := make(map[string]bool)
+	
+	// Current page index
+	currentPage := 0
+	totalPages := (len(issues) + pageSize - 1) / pageSize
 
-	// Loop through each ticket
-	for _, issue := range issues {
-		// Get priority and assignee info
-		priority := "None"
-		assignee := "None"
-		// Note: We'd need to expand the Issue struct to include these fields
-		// For now, we'll show a simplified version
-
-		// Print compact summary
-		fmt.Printf("\n%s: \"%s\" (Priority: %s, Assignee: %s) -> Action? [a(ssign), t(riage), d(etail), e(stimate), s(kip), q(uit)] ",
-			issue.Key, issue.Fields.Summary, priority, assignee)
-
+	for {
+		// Calculate page boundaries
+		start := currentPage * pageSize
+		end := start + pageSize
+		if end > len(issues) {
+			end = len(issues)
+		}
+		
+		pageIssues := issues[start:end]
+		
+		// Display page header
+		fmt.Printf("\n=== Page %d of %d (%d tickets) ===\n\n", currentPage+1, totalPages, len(issues))
+		
+		// Display tickets in a table format
+		fmt.Printf("%-4s %-12s %-50s %-12s %-20s %-8s\n", "#", "Key", "Summary", "Priority", "Assignee", "Status")
+		fmt.Println(strings.Repeat("-", 110))
+		
+		for i, issue := range pageIssues {
+			idx := start + i + 1
+			
+			// Get priority and assignee
+			priority := "None"
+			if issue.Fields.Priority.Name != "" {
+				priority = issue.Fields.Priority.Name
+			}
+			
+			assignee := "Unassigned"
+			if issue.Fields.Assignee.DisplayName != "" {
+				assignee = issue.Fields.Assignee.DisplayName
+			}
+			
+			// Truncate summary if too long
+			summary := issue.Fields.Summary
+			if len(summary) > 48 {
+				summary = summary[:45] + "..."
+			}
+			
+			// Mark if acted on
+			marker := ""
+			if actedOn[issue.Key] {
+				marker = "✓ "
+			}
+			
+			fmt.Printf("%-4d %-12s %-50s %-12s %-20s %-8s %s\n",
+				idx, issue.Key, summary, priority, assignee, issue.Fields.Status.Name, marker)
+		}
+		
+		fmt.Println()
+		fmt.Printf("Actions: [1-%d] select ticket | [n]ext | [p]rev | [q]uit\n", len(pageIssues))
+		fmt.Print("> ")
+		
 		// Read user input
 		input, err := reader.ReadString('\n')
 		if err != nil {
 			return fmt.Errorf("failed to read input: %w", err)
 		}
 		input = strings.TrimSpace(strings.ToLower(input))
-
-		switch input {
+		
+		// Handle navigation
+		if input == "n" || input == "next" {
+			if currentPage < totalPages-1 {
+				currentPage++
+			} else {
+				fmt.Println("Already on last page.")
+			}
+			continue
+		}
+		
+		if input == "p" || input == "prev" {
+			if currentPage > 0 {
+				currentPage--
+			} else {
+				fmt.Println("Already on first page.")
+			}
+			continue
+		}
+		
+		if input == "q" || input == "quit" {
+			return nil
+		}
+		
+		// Try to parse as ticket number
+		ticketNum, err := strconv.Atoi(input)
+		if err != nil {
+			fmt.Println("Invalid input. Please enter a ticket number, 'n' for next, 'p' for prev, or 'q' to quit.")
+			continue
+		}
+		
+		// Validate ticket number
+		if ticketNum < 1 || ticketNum > len(issues) {
+			fmt.Printf("Invalid ticket number. Please enter a number between 1 and %d.\n", len(issues))
+			continue
+		}
+		
+		// Get the selected ticket
+		selectedIssue := issues[ticketNum-1]
+		
+		// Show ticket details and action menu
+		fmt.Printf("\nSelected: %s - %s\n", selectedIssue.Key, selectedIssue.Fields.Summary)
+		fmt.Printf("Priority: %s | Assignee: %s | Status: %s\n", 
+			getPriorityName(selectedIssue), getAssigneeName(selectedIssue), selectedIssue.Fields.Status.Name)
+		fmt.Print("Action? [a(ssign), t(riage), d(etail), e(stimate), b(ack)] > ")
+		
+		action, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read input: %w", err)
+		}
+		action = strings.TrimSpace(strings.ToLower(action))
+		
+		success := false
+		switch action {
 		case "a", "assign":
-			if err := handleAssign(client, reader, cfg, issue.Key); err != nil {
+			if err := handleAssign(client, reader, cfg, selectedIssue.Key); err != nil {
 				fmt.Printf("Error assigning ticket: %v\n", err)
+			} else {
+				success = true
+				fmt.Println("Ticket assigned successfully.")
 			}
 		case "t", "triage":
-			if err := handleTriage(client, reader, issue.Key); err != nil {
+			if err := handleTriage(client, reader, selectedIssue.Key); err != nil {
 				fmt.Printf("Error triaging ticket: %v\n", err)
+			} else {
+				success = true
+				fmt.Println("Ticket triaged successfully.")
 			}
 		case "d", "detail":
-			if err := handleDetail(client, reader, issue.Key, issue.Fields.Summary); err != nil {
+			if err := handleDetail(client, reader, selectedIssue.Key, selectedIssue.Fields.Summary); err != nil {
 				fmt.Printf("Error adding detail: %v\n", err)
+			} else {
+				success = true
+				fmt.Println("Description updated successfully.")
 			}
 		case "e", "estimate":
-			if err := handleEstimate(client, reader, cfg, issue.Key); err != nil {
+			if err := handleEstimate(client, reader, cfg, selectedIssue.Key); err != nil {
 				fmt.Printf("Error estimating ticket: %v\n", err)
+			} else {
+				success = true
+				fmt.Println("Story points updated successfully.")
 			}
-		case "s", "skip":
+		case "b", "back":
+			// Just go back to the list
 			continue
-		case "q", "quit":
-			return nil
 		default:
-			fmt.Println("Invalid action. Skipping...")
+			fmt.Println("Invalid action.")
+			continue
+		}
+		
+		// Mark as acted on if successful
+		if success {
+			actedOn[selectedIssue.Key] = true
+			// Refresh the ticket data to show updated info
+			updated, err := client.SearchTickets(fmt.Sprintf("key = %s", selectedIssue.Key))
+			if err == nil && len(updated) > 0 {
+				issues[ticketNum-1] = updated[0]
+			}
 		}
 	}
+}
 
-	return nil
+// Helper functions to safely get priority and assignee names
+func getPriorityName(issue jira.Issue) string {
+	if issue.Fields.Priority.Name != "" {
+		return issue.Fields.Priority.Name
+	}
+	return "None"
+}
+
+func getAssigneeName(issue jira.Issue) string {
+	if issue.Fields.Assignee.DisplayName != "" {
+		return issue.Fields.Assignee.DisplayName
+	}
+	return "Unassigned"
 }
 
 func handleAssign(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticketID string) error {

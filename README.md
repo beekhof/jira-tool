@@ -99,6 +99,7 @@ favorite_releases:
   - Available models can be listed with: `jira models`
   - Common options: `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-2.0-flash`
 - **`max_questions`** (optional): Maximum number of questions in Q&A flow (default: `4`)
+- **`review_page_size`** (optional): Number of tickets per page in review command (default: `10`)
 
 #### Prompt Templates
 
@@ -252,13 +253,25 @@ jira status spikes
 - `--next, -n`: Show next sprint/release instead of current (only for sprint/release)
 
 ### `review`
-Review and triage tickets interactively.
+Review and triage tickets interactively with paginated view.
 
 ```bash
 jira review
 jira review --unassigned
 jira review --untriaged
 ```
+
+**Features:**
+- Displays tickets in pages (default 10 per page, configurable via `review_page_size` in config)
+- Shows ticket key, summary, priority, assignee, and status in a table format
+- Marks tickets with ✓ after actions are performed
+- Supports page navigation: `n`/`next` for next page, `p`/`prev` for previous page
+- After acting on a ticket, returns to the list showing updated information
+
+**Usage:**
+1. Enter a ticket number (1-N) to select a ticket
+2. Choose an action: `a` (assign), `t` (triage), `d` (detail), `e` (estimate), `b` (back)
+3. After completing an action, you'll return to the list view
 
 **Flags:**
 - `--needs-detail`: Show only tickets that need detail

@@ -19,6 +19,7 @@ type Config struct {
 	DescriptionPromptTemplate string `yaml:"description_prompt_template,omitempty"`
 	SpikeQuestionPromptTemplate string `yaml:"spike_question_prompt_template,omitempty"`
 	SpikePromptTemplate    string   `yaml:"spike_prompt_template,omitempty"`
+	ReviewPageSize         int      `yaml:"review_page_size,omitempty"`
 	FavoriteAssignees      []string `yaml:"favorite_assignees,omitempty"`
 	FavoriteSprints        []string `yaml:"favorite_sprints,omitempty"`
 	FavoriteReleases       []string `yaml:"favorite_releases,omitempty"`

@@ -192,6 +192,34 @@ func runSprintStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("In Progress: %.0f points (%d issues)\n", inProgressPoints, inProgressCount)
 	fmt.Printf("Done:        %.0f points (%d issues)\n", donePoints, doneCount)
 
+	// Group issues by status
+	statusGroups := make(map[string][]jira.Issue)
+	for _, issue := range issues {
+		status := issue.Fields.Status.Name
+		statusGroups[status] = append(statusGroups[status], issue)
+	}
+
+	// Print detailed list grouped by status
+	fmt.Println("\n---")
+	fmt.Println("Tickets:")
+	fmt.Println()
+
+	statusOrder := []string{"To Do", "Open", "Backlog", "In Progress", "In Review", "Review", "Done", "Closed", "Resolved"}
+	for _, statusName := range statusOrder {
+		if groupIssues, ok := statusGroups[statusName]; ok {
+			fmt.Printf("[%s]\n", statusName)
+			for _, issue := range groupIssues {
+				points := issue.Fields.StoryPoints
+				if points > 0 {
+					fmt.Printf("  %s: %s (%.0f points)\n", issue.Key, issue.Fields.Summary, points)
+				} else {
+					fmt.Printf("  %s: %s\n", issue.Key, issue.Fields.Summary)
+				}
+			}
+			fmt.Println()
+		}
+	}
+
 	return nil
 }
 
@@ -341,6 +369,34 @@ func runReleaseStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("In Progress: %.0f points (%d issues)\n", inProgressPoints, inProgressCount)
 	fmt.Printf("Done:        %.0f points (%d issues)\n", donePoints, doneCount)
 
+	// Group issues by status
+	statusGroups := make(map[string][]jira.Issue)
+	for _, issue := range issues {
+		status := issue.Fields.Status.Name
+		statusGroups[status] = append(statusGroups[status], issue)
+	}
+
+	// Print detailed list grouped by status
+	fmt.Println("\n---")
+	fmt.Println("Tickets:")
+	fmt.Println()
+
+	statusOrder := []string{"To Do", "Open", "Backlog", "In Progress", "In Review", "Review", "Done", "Closed", "Resolved"}
+	for _, statusName := range statusOrder {
+		if groupIssues, ok := statusGroups[statusName]; ok {
+			fmt.Printf("[%s]\n", statusName)
+			for _, issue := range groupIssues {
+				points := issue.Fields.StoryPoints
+				if points > 0 {
+					fmt.Printf("  %s: %s (%.0f points)\n", issue.Key, issue.Fields.Summary, points)
+				} else {
+					fmt.Printf("  %s: %s\n", issue.Key, issue.Fields.Summary)
+				}
+			}
+			fmt.Println()
+		}
+	}
+
 	return nil
 }
 
@@ -363,20 +419,23 @@ func runSpikesStatus(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("default_project not configured. Please run 'jira init'")
 	}
 
-	// Search for spike tickets - summary contains "SPIKE" (case-insensitive)
-	// We'll filter to only those starting with "SPIKE" prefix
-	jql := fmt.Sprintf("project = %s AND summary ~ \"SPIKE\" ORDER BY status, updated DESC", projectKey)
+	// Search for spike tickets - JQL ~ operator is case-insensitive
+	// Search for tickets with "SPIKE" anywhere in summary, then filter to those starting with SPIKE
+	// We search broadly first to catch all variations, then filter in code
+	jql := fmt.Sprintf("project = %s AND summary ~ \"spike\" ORDER BY status, updated DESC", projectKey)
 	allIssues, err := client.SearchTickets(jql)
 	if err != nil {
 		return fmt.Errorf("failed to search for spike tickets: %w", err)
 	}
 
-	// Filter to only tickets that start with "SPIKE" prefix (case-insensitive)
+	// Filter to only tickets that start with "SPIKE" prefix (case-insensitive) or have SPIKE in key
+	// This ensures we only show actual spike tickets, not tickets that just mention "spike" in the description
 	issues := []jira.Issue{}
 	for _, issue := range allIssues {
 		summary := issue.Fields.Summary
 		key := issue.Key
 		// Use IsSpike function to check if this is a spike ticket
+		// This checks if summary starts with "SPIKE" (case-insensitive) or key contains "SPIKE"
 		if gemini.IsSpike(summary, key) {
 			issues = append(issues, issue)
 		}
@@ -426,7 +485,7 @@ func runSpikesStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println("---")
 
 	// Print by status
-	statusOrder := []string{"To Do", "Open", "Backlog", "In Progress", "In Review", "Review", "Done", "Closed", "Resolved"}
+	statusOrder := []string{"New", "To Do", "Open", "Backlog", "In Progress", "In Review", "Review", "Done", "Closed", "Resolved"}
 	for _, statusName := range statusOrder {
 		if issues, ok := statusGroups[statusName]; ok {
 			var points float64
