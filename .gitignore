@@ -7,7 +7,6 @@
 bin/
 jira-tool
 jira-tool.exe
-go-jira-helper
 
 # Test binary, built with `go test -c`
 *.test

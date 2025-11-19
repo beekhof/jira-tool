@@ -24,13 +24,30 @@ var createCmd = &cobra.Command{
 	Use:   "create [SUMMARY]",
 	Short: "Create a new Jira ticket",
 	Long: `Create a new Jira ticket with the given summary.
-The project and type can be specified via flags, otherwise defaults from config are used.`,
-	Args: cobra.ExactArgs(1),
+The project and type can be specified via flags, otherwise defaults from config are used.
+
+You can create a spike ticket by using "spike" as the first word:
+  jira-tool create spike research authentication options
+
+This is equivalent to:
+  jira-tool create "SPIKE: research authentication options"`,
+	Args: cobra.MinimumNArgs(1),
 	RunE: runCreate,
 }
 
 func runCreate(cmd *cobra.Command, args []string) error {
-	summary := args[0]
+	// Check if first argument is "spike" (case-insensitive)
+	// If so, prepend "SPIKE: " to the rest of the summary
+	summary := strings.Join(args, " ")
+	if len(args) > 0 && strings.ToLower(args[0]) == "spike" {
+		// If it's "spike", join the rest and prepend "SPIKE: "
+		if len(args) > 1 {
+			summary = "SPIKE: " + strings.Join(args[1:], " ")
+		} else {
+			// Just "spike" with no other text
+			summary = "SPIKE"
+		}
+	}
 
 	// Get config directory
 	configDir := GetConfigDir()
