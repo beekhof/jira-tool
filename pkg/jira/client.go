@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/beekhof/jira-tool/pkg/config"
@@ -150,10 +151,11 @@ type IssueResponse struct {
 
 // jiraClient is the concrete implementation of JiraClient
 type jiraClient struct {
-	baseURL    string
-	httpClient *http.Client
-	authToken  string
-	cache      *Cache
+	baseURL           string
+	httpClient        *http.Client
+	authToken         string
+	cache             *Cache
+	storyPointsFieldID string
 }
 
 // NewClient creates a new Jira client by loading config and credentials
@@ -182,11 +184,18 @@ func NewClient(configDir string) (JiraClient, error) {
 		_ = err
 	}
 
+	// Get story points field ID from config, default to customfield_10016
+	storyPointsFieldID := cfg.StoryPointsFieldID
+	if storyPointsFieldID == "" {
+		storyPointsFieldID = "customfield_10016"
+	}
+
 	client := &jiraClient{
-		baseURL:    cfg.JiraURL,
-		httpClient: &http.Client{},
-		authToken:  token,
-		cache:      cache,
+		baseURL:            cfg.JiraURL,
+		httpClient:         &http.Client{},
+		authToken:          token,
+		cache:              cache,
+		storyPointsFieldID: storyPointsFieldID,
 	}
 
 	return client, nil
@@ -198,17 +207,15 @@ func (c *jiraClient) setAuth(req *http.Request) {
 }
 
 // UpdateTicketPoints updates the story points for a ticket
-// Note: The story points field ID (customfield_10016) may need to be configured per Jira instance
+// Uses the configurable story points field ID from config
 func (c *jiraClient) UpdateTicketPoints(ticketID string, points int) error {
 	// Construct the API endpoint
 	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s", c.baseURL, ticketID)
 
-	// Construct the JSON payload
-	// Note: The field ID for story points varies by Jira instance
-	// This uses a common default, but may need to be configurable
+	// Construct the JSON payload using the configured field ID
 	payload := map[string]interface{}{
 		"fields": map[string]interface{}{
-			"customfield_10016": points,
+			c.storyPointsFieldID: points,
 		},
 	}
 
@@ -236,13 +243,41 @@ func (c *jiraClient) UpdateTicketPoints(ticketID string, points int) error {
 
 	// Check response status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// Read response body for more details
+		body, _ := io.ReadAll(resp.Body)
+		bodyStr := string(body)
+
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			return fmt.Errorf("authentication failed. Your Jira token may be invalid. Please run 'jira init'")
 		}
 		if resp.StatusCode == 404 {
 			return fmt.Errorf("ticket %s not found", ticketID)
 		}
-		return fmt.Errorf("Jira API returned error: %d %s", resp.StatusCode, resp.Status)
+		if resp.StatusCode == 400 {
+			// Try to parse error message from response
+			var apiError struct {
+				ErrorMessages []string          `json:"errorMessages"`
+				Errors        map[string]string `json:"errors"`
+			}
+			if err := json.Unmarshal(body, &apiError); err == nil {
+				if len(apiError.ErrorMessages) > 0 {
+					return fmt.Errorf("Jira API error: %s", strings.Join(apiError.ErrorMessages, "; "))
+				}
+				if len(apiError.Errors) > 0 {
+					var errorMsgs []string
+					for k, v := range apiError.Errors {
+						errorMsgs = append(errorMsgs, fmt.Sprintf("%s: %s", k, v))
+					}
+					return fmt.Errorf("Jira API error: %s", strings.Join(errorMsgs, "; "))
+				}
+			}
+			// If parsing failed, check if it's a custom field issue
+			if strings.Contains(bodyStr, "customfield") || strings.Contains(bodyStr, "field") {
+				return fmt.Errorf("Jira API error: %d %s - %s\nNote: The story points field ID (%s) may be incorrect for your Jira instance. You can configure it in your config file with 'story_points_field_id'.", resp.StatusCode, resp.Status, bodyStr, c.storyPointsFieldID)
+			}
+			return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
+		}
+		return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
 	}
 
 	return nil
@@ -975,6 +1010,10 @@ func (c *jiraClient) SearchUsers(query string) ([]User, error) {
 
 // AssignTicket assigns a ticket to a user
 func (c *jiraClient) AssignTicket(ticketID, userAccountID string) error {
+	if userAccountID == "" {
+		return fmt.Errorf("user account ID cannot be empty")
+	}
+
 	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s/assignee", c.baseURL, ticketID)
 
 	// Construct the JSON payload
@@ -1002,13 +1041,37 @@ func (c *jiraClient) AssignTicket(ticketID, userAccountID string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// Read response body for more details
+		body, _ := io.ReadAll(resp.Body)
+		bodyStr := string(body)
+
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			return fmt.Errorf("authentication failed. Your Jira token may be invalid. Please run 'jira init'")
 		}
 		if resp.StatusCode == 404 {
 			return fmt.Errorf("ticket %s not found", ticketID)
 		}
-		return fmt.Errorf("Jira API returned error: %d %s", resp.StatusCode, resp.Status)
+		if resp.StatusCode == 400 {
+			// Try to parse error message from response
+			var apiError struct {
+				ErrorMessages []string `json:"errorMessages"`
+				Errors        map[string]string `json:"errors"`
+			}
+			if err := json.Unmarshal(body, &apiError); err == nil {
+				if len(apiError.ErrorMessages) > 0 {
+					return fmt.Errorf("Jira API error: %s", strings.Join(apiError.ErrorMessages, "; "))
+				}
+				if len(apiError.Errors) > 0 {
+					var errorMsgs []string
+					for k, v := range apiError.Errors {
+						errorMsgs = append(errorMsgs, fmt.Sprintf("%s: %s", k, v))
+					}
+					return fmt.Errorf("Jira API error: %s", strings.Join(errorMsgs, "; "))
+				}
+			}
+			return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
+		}
+		return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
 	}
 
 	return nil

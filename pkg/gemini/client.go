@@ -18,6 +18,7 @@ import (
 type GeminiClient interface {
 	GenerateQuestion(history []string, context string, issueType string) (string, error)
 	GenerateDescription(history []string, context string, issueType string) (string, error)
+	EstimateStoryPoints(summary, description string, availablePoints []int) (int, string, error)
 }
 
 // geminiClient is the concrete implementation of GeminiClient
@@ -253,6 +254,83 @@ func (c *geminiClient) GenerateQuestion(history []string, context string, issueT
 func (c *geminiClient) GenerateDescription(history []string, context string, issueType string) (string, error) {
 	prompt := c.buildDescriptionPrompt(history, context, issueType)
 	return c.generateContent(prompt)
+}
+
+// EstimateStoryPoints estimates story points for a ticket based on summary and description
+// Returns the estimated points, reasoning text, and any error
+func (c *geminiClient) EstimateStoryPoints(summary, description string, availablePoints []int) (int, string, error) {
+	// Build the prompt
+	var pointsList strings.Builder
+	for i, points := range availablePoints {
+		if i > 0 {
+			pointsList.WriteString(", ")
+		}
+		pointsList.WriteString(fmt.Sprintf("%d", points))
+	}
+	if len(availablePoints) > 0 {
+		pointsList.WriteString(" (or any other positive integer)")
+	}
+
+	prompt := fmt.Sprintf(`You are an expert at estimating story points for software development tasks using Agile/Scrum methodology.
+
+Ticket Summary: %s
+
+Ticket Description:
+%s
+
+Available story point options: %s
+
+Please provide a story point estimate for this ticket. Consider:
+- Complexity and technical difficulty
+- Amount of work required
+- Risk and uncertainty
+- Dependencies and integration effort
+
+Respond with ONLY a single number (the story point estimate), followed by a brief one-sentence explanation of your reasoning.
+
+Example format:
+5
+This task involves moderate complexity with clear requirements and minimal risk.`, summary, description, pointsList.String())
+
+	response, err := c.generateContent(prompt)
+	if err != nil {
+		return 0, "", err
+	}
+
+	// Parse the response to extract the number
+	// Look for the first number in the response
+	lines := strings.Split(strings.TrimSpace(response), "\n")
+	if len(lines) == 0 {
+		return 0, response, fmt.Errorf("could not parse story point estimate from response")
+	}
+
+	// Try to extract number from first line
+	firstLine := strings.TrimSpace(lines[0])
+	var estimate int
+	_, err = fmt.Sscanf(firstLine, "%d", &estimate)
+	if err != nil {
+		// Try to find any number in the response
+		var found bool
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			_, err := fmt.Sscanf(line, "%d", &estimate)
+			if err == nil && estimate > 0 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return 0, response, fmt.Errorf("could not find a valid story point estimate in response")
+		}
+	}
+
+	// Build reasoning from remaining lines
+	reasoning := strings.TrimSpace(strings.Join(lines[1:], " "))
+	if reasoning == "" {
+		reasoning = response
+	}
+
+	return estimate, reasoning, nil
 }
 
 // buildQuestionPrompt constructs the prompt for generating a question

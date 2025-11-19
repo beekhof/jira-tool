@@ -73,6 +73,7 @@ story_point_options:
   - 5
   - 8
   - 13
+story_points_field_id: customfield_10016  # Optional: customize if your Jira uses a different field ID
 favorite_assignees:
   - user1@example.com
   - user2@example.com
@@ -92,6 +93,10 @@ favorite_releases:
 - **`default_project`** (required): Default project key for ticket creation
 - **`default_task_type`** (required): Default issue type (e.g., "Task", "Story", "Bug")
 - **`story_point_options`** (optional): List of story point values for estimation (default: Fibonacci sequence)
+- **`story_points_field_id`** (optional): Custom field ID for story points in your Jira instance (default: `customfield_10016`)
+  - **Automatically detected during `jira init`**: The tool will query your Jira instance to find the story points field
+  - If automatic detection fails, it falls back to `customfield_10016`
+  - You can manually configure it in your config file if needed
 
 #### Gemini AI Settings
 

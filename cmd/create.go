@@ -148,10 +148,92 @@ func runCreate(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			fmt.Printf("Updated %s with description.\n", ticketKey)
+
+			// Prompt to review the ticket
+			fmt.Print("\nWould you like to review this ticket? [y/N] ")
+			reviewResponse, err := reader.ReadString('\n')
+			if err != nil {
+				return fmt.Errorf("failed to read input: %w", err)
+			}
+			reviewResponse = strings.TrimSpace(strings.ToLower(reviewResponse))
+
+			if reviewResponse == "y" || reviewResponse == "yes" {
+				// Fetch updated ticket details
+				issues, err := client.SearchTickets(fmt.Sprintf("key = %s", ticketKey))
+				if err != nil {
+					return fmt.Errorf("failed to fetch ticket: %w", err)
+				}
+				if len(issues) == 0 {
+					return fmt.Errorf("ticket %s not found", ticketKey)
+				}
+
+				selectedIssue := issues[0]
+				if err := reviewTicket(client, reader, cfg, selectedIssue); err != nil {
+					return fmt.Errorf("error reviewing ticket: %w", err)
+				}
+			}
 		}
 	}
 
 	return nil
+}
+
+// reviewTicket handles the review workflow for a single ticket
+// This is shared between create and review commands
+func reviewTicket(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, issue jira.Issue) error {
+	for {
+		// Show ticket details and action menu
+		fmt.Printf("\n=== %s - %s ===\n", issue.Key, issue.Fields.Summary)
+		fmt.Printf("Priority: %s | Assignee: %s | Status: %s\n",
+			getPriorityName(issue), getAssigneeName(issue), issue.Fields.Status.Name)
+		fmt.Print("Action? [a(ssign), t(riage), e(stimate), d(one)] > ")
+
+		action, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read input: %w", err)
+		}
+		action = strings.TrimSpace(strings.ToLower(action))
+
+		switch action {
+		case "a", "assign":
+			if err := handleAssign(client, reader, cfg, issue.Key); err != nil {
+				fmt.Printf("Error assigning ticket: %v\n", err)
+			} else {
+				fmt.Println("Ticket assigned successfully.")
+				// Refresh ticket data
+				updated, err := client.SearchTickets(fmt.Sprintf("key = %s", issue.Key))
+				if err == nil && len(updated) > 0 {
+					issue = updated[0]
+				}
+			}
+		case "t", "triage":
+			if err := handleTriage(client, reader, issue.Key); err != nil {
+				fmt.Printf("Error triaging ticket: %v\n", err)
+			} else {
+				fmt.Println("Ticket triaged successfully.")
+				// Refresh ticket data
+				updated, err := client.SearchTickets(fmt.Sprintf("key = %s", issue.Key))
+				if err == nil && len(updated) > 0 {
+					issue = updated[0]
+				}
+			}
+		case "e", "estimate":
+			if err := handleEstimate(client, reader, cfg, issue.Key); err != nil {
+				fmt.Printf("Error estimating ticket: %v\n", err)
+			} else {
+				fmt.Println("Story points updated successfully.")
+				// Refresh ticket data
+				updated, err := client.SearchTickets(fmt.Sprintf("key = %s", issue.Key))
+				if err == nil && len(updated) > 0 {
+					issue = updated[0]
+				}
+			}
+		case "d", "done":
+			return nil
+		default:
+			fmt.Println("Invalid action. Use 'a' for assign, 't' for triage, 'e' for estimate, or 'd' for done.")
+		}
+	}
 }
 
 func init() {

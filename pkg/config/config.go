@@ -24,6 +24,7 @@ type Config struct {
 	FavoriteSprints        []string `yaml:"favorite_sprints,omitempty"`
 	FavoriteReleases       []string `yaml:"favorite_releases,omitempty"`
 	StoryPointOptions      []int    `yaml:"story_point_options,omitempty"`
+	StoryPointsFieldID     string   `yaml:"story_points_field_id,omitempty"`
 }
 
 // GetConfigPath returns the path for the config file

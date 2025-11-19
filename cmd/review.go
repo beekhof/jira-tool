@@ -460,44 +460,80 @@ func handleEstimate(client jira.JiraClient, reader *bufio.Reader, cfg *config.Co
 		storyPoints = []int{1, 2, 3, 5, 8, 13}
 	}
 
-	// Display the Fibonacci prompt
+	// Fetch ticket details for Gemini estimation
+	fmt.Printf("Fetching ticket details for %s...\n", ticketID)
+	issues, err := client.SearchTickets(fmt.Sprintf("key = %s", ticketID))
+	if err != nil {
+		return fmt.Errorf("failed to fetch ticket: %w", err)
+	}
+	if len(issues) == 0 {
+		return fmt.Errorf("ticket %s not found", ticketID)
+	}
+
+	ticket := issues[0]
+	summary := ticket.Fields.Summary
+	description, err := client.GetTicketDescription(ticketID)
+	if err != nil {
+		// Description might be empty, that's okay
+		description = ""
+	}
+
+	// Get Gemini estimate
+	fmt.Println("Getting AI story point estimate...")
+	configDir := GetConfigDir()
+	geminiClient, err := gemini.NewClient(configDir)
+	if err != nil {
+		// If Gemini fails, continue with manual selection
+		fmt.Printf("Warning: Could not initialize Gemini client: %v\n", err)
+		fmt.Println("Continuing with manual selection...")
+	} else {
+		estimate, reasoning, err := geminiClient.EstimateStoryPoints(summary, description, storyPoints)
+		if err != nil {
+			fmt.Printf("Warning: Could not get AI estimate: %v\n", err)
+			fmt.Println("Continuing with manual selection...")
+		} else {
+			fmt.Printf("\n🤖 AI Estimate: %d story points\n", estimate)
+			if reasoning != "" {
+				fmt.Printf("   Reasoning: %s\n", reasoning)
+			}
+			fmt.Println()
+		}
+	}
+
+	// Display the Fibonacci prompt with letters
 	fmt.Println("Select story points:")
 	for i, points := range storyPoints {
-		fmt.Printf("[%d] %d\n", i+1, points)
+		letter := string(rune('a' + i))
+		fmt.Printf("[%s] %d\n", letter, points)
 	}
-	fmt.Printf("[%d] Other...\n", len(storyPoints)+1)
+	fmt.Println("Or enter a number directly")
 	fmt.Print("> ")
 
 	input, err := reader.ReadString('\n')
 	if err != nil {
 		return fmt.Errorf("failed to read input: %w", err)
 	}
-	input = strings.TrimSpace(input)
-
-	selected, err := strconv.Atoi(input)
-	if err != nil {
-		return fmt.Errorf("invalid selection: %s", input)
-	}
+	input = strings.TrimSpace(strings.ToLower(input))
 
 	var points int
-	if selected >= 1 && selected <= len(storyPoints) {
-		points = storyPoints[selected-1]
-	} else if selected == len(storyPoints)+1 {
-		fmt.Print("Enter story points: ")
-		customInput, err := reader.ReadString('\n')
-		if err != nil {
-			return fmt.Errorf("failed to read input: %w", err)
-		}
-		customInput = strings.TrimSpace(customInput)
-		points, err = strconv.Atoi(customInput)
-		if err != nil {
-			return fmt.Errorf("invalid number: %s", customInput)
-		}
-		if points <= 0 {
+	// Try to parse as number first
+	if num, err := strconv.Atoi(input); err == nil {
+		// Direct number entry
+		if num <= 0 {
 			return fmt.Errorf("story points must be positive")
 		}
+		points = num
+	} else if len(input) == 1 {
+		// Try to parse as letter
+		letter := input[0]
+		index := int(letter - 'a')
+		if index >= 0 && index < len(storyPoints) {
+			points = storyPoints[index]
+		} else {
+			return fmt.Errorf("invalid selection: %s", input)
+		}
 	} else {
-		return fmt.Errorf("invalid selection: %d", selected)
+		return fmt.Errorf("invalid input: %s (use a letter or number)", input)
 	}
 
 	return client.UpdateTicketPoints(ticketID, points)
