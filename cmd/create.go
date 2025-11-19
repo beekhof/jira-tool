@@ -77,7 +77,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create Jira client
-	client, err := jira.NewClient(configDir)
+	client, err := jira.NewClient(configDir, GetNoCache())
 	if err != nil {
 		return err
 	}

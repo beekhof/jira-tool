@@ -9,6 +9,7 @@ import (
 
 var (
 	configDir string
+	noCache   bool
 )
 
 var rootCmd = &cobra.Command{
@@ -35,7 +36,13 @@ func GetConfigDir() string {
 	return filepath.Join(homeDir, ".jira-tool")
 }
 
+// GetNoCache returns whether the --no-cache flag is set
+func GetNoCache() bool {
+	return noCache
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVar(&configDir, "config-dir", "", "Configuration directory (default: ~/.jira-tool)")
+	rootCmd.PersistentFlags().BoolVar(&noCache, "no-cache", false, "Bypass cache and fetch fresh data from API")
 	// Commands register themselves in their own init() functions
 }

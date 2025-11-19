@@ -30,7 +30,7 @@ func runAccept(cmd *cobra.Command, args []string) error {
 	ticketID := args[0]
 
 	configDir := GetConfigDir()
-	client, err := jira.NewClient(configDir)
+	client, err := jira.NewClient(configDir, GetNoCache())
 	if err != nil {
 		return err
 	}

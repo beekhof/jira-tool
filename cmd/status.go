@@ -45,7 +45,7 @@ var spikesCmd = &cobra.Command{
 
 func runSprintStatus(cmd *cobra.Command, args []string) error {
 	configDir := GetConfigDir()
-	client, err := jira.NewClient(configDir)
+	client, err := jira.NewClient(configDir, GetNoCache())
 	if err != nil {
 		return err
 	}
@@ -225,7 +225,7 @@ func runSprintStatus(cmd *cobra.Command, args []string) error {
 
 func runReleaseStatus(cmd *cobra.Command, args []string) error {
 	configDir := GetConfigDir()
-	client, err := jira.NewClient(configDir)
+	client, err := jira.NewClient(configDir, GetNoCache())
 	if err != nil {
 		return err
 	}
@@ -402,7 +402,7 @@ func runReleaseStatus(cmd *cobra.Command, args []string) error {
 
 func runSpikesStatus(cmd *cobra.Command, args []string) error {
 	configDir := GetConfigDir()
-	client, err := jira.NewClient(configDir)
+	client, err := jira.NewClient(configDir, GetNoCache())
 	if err != nil {
 		return err
 	}

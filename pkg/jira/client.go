@@ -70,6 +70,10 @@ type User struct {
 	AccountID    string `json:"accountId"`
 	DisplayName  string `json:"displayName"`
 	EmailAddress string `json:"emailAddress"`
+	// Alternative field names that Jira might use
+	Key          string `json:"key"`        // Some Jira instances use "key" instead of accountId
+	AccountIDAlt string `json:"account_id"` // Snake case variant
+	Name         string `json:"name"`       // Username/name field
 }
 
 // Priority represents a Jira priority
@@ -128,8 +132,8 @@ type Issue struct {
 			Name string `json:"name"`
 		} `json:"priority"`
 		Assignee struct {
-			AccountID   string `json:"accountId"`
-			DisplayName string `json:"displayName"`
+			AccountID    string `json:"accountId"`
+			DisplayName  string `json:"displayName"`
 			EmailAddress string `json:"emailAddress"`
 		} `json:"assignee"`
 		StoryPoints float64 `json:"customfield_10016"`
@@ -151,16 +155,18 @@ type IssueResponse struct {
 
 // jiraClient is the concrete implementation of JiraClient
 type jiraClient struct {
-	baseURL           string
-	httpClient        *http.Client
-	authToken         string
-	cache             *Cache
+	baseURL            string
+	httpClient         *http.Client
+	authToken          string
+	cache              *Cache
 	storyPointsFieldID string
+	noCache            bool
 }
 
 // NewClient creates a new Jira client by loading config and credentials
 // configDir can be empty to use the default ~/.jira-tool
-func NewClient(configDir string) (JiraClient, error) {
+// noCache if true, bypasses cache for all operations
+func NewClient(configDir string, noCache bool) (JiraClient, error) {
 	configPath := config.GetConfigPath(configDir)
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
@@ -196,6 +202,7 @@ func NewClient(configDir string) (JiraClient, error) {
 		authToken:          token,
 		cache:              cache,
 		storyPointsFieldID: storyPointsFieldID,
+		noCache:            noCache,
 	}
 
 	return client, nil
@@ -945,18 +952,32 @@ func parseDateString(dateStr string) time.Time {
 
 // SearchUsers searches for users in Jira
 func (c *jiraClient) SearchUsers(query string) ([]User, error) {
-	// Check cache first
-	c.cache.mu.RLock()
-	if users, ok := c.cache.Users[query]; ok && len(users) > 0 {
-		userCopy := make([]User, len(users))
-		copy(userCopy, users)
+	// Check cache first (unless --no-cache is set)
+	if !c.noCache {
+		c.cache.mu.RLock()
+		if users, ok := c.cache.Users[query]; ok && len(users) > 0 {
+			userCopy := make([]User, len(users))
+			copy(userCopy, users)
+			c.cache.mu.RUnlock()
+			return userCopy, nil
+		}
 		c.cache.mu.RUnlock()
-		return userCopy, nil
 	}
-	c.cache.mu.RUnlock()
 
+	// Helper function to check if response is HTML
+	isHTML := func(data []byte) bool {
+		dataStr := strings.TrimSpace(string(data))
+		return strings.HasPrefix(dataStr, "<!DOCTYPE") || strings.HasPrefix(dataStr, "<html") || strings.HasPrefix(dataStr, "<HTML")
+	}
+
+	// Try API v2 first (more widely supported), then v3 as fallback
+	var body []byte
+	var err error
+	var resp *http.Response
+
+	// Try v2 first
 	endpoint, err := buildURL(c.baseURL, "/rest/api/2/user/search", map[string]string{
-		"query": query,
+		"username": query,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to build URL: %w", err)
@@ -970,39 +991,133 @@ func (c *jiraClient) SearchUsers(query string) ([]User, error) {
 	req.Header.Set("Accept", "application/json")
 	c.setAuth(req)
 
-	resp, err := c.httpClient.Do(req)
+	resp, err = c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == 401 || resp.StatusCode == 403 {
-			return nil, fmt.Errorf("authentication failed. Your Jira token may be invalid. Please run 'jira init'")
-		}
-		return nil, fmt.Errorf("Jira API returned error: %d %s", resp.StatusCode, resp.Status)
-	}
-
-	body, err := io.ReadAll(resp.Body)
+	body, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	var users []User
-	if err := json.Unmarshal(body, &users); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	// Check if v2 returned HTML (endpoint doesn't exist) or error
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 || isHTML(body) {
+		// Try v3 as fallback
+		endpoint, err := buildURL(c.baseURL, "/rest/api/3/user/search", map[string]string{
+			"query": query,
+		})
+		if err == nil {
+			req, err := http.NewRequest("GET", endpoint, nil)
+			if err == nil {
+				req.Header.Set("Accept", "application/json")
+				c.setAuth(req)
+
+				resp2, err := c.httpClient.Do(req)
+				if err == nil {
+					defer resp2.Body.Close()
+					body2, err := io.ReadAll(resp2.Body)
+					if err == nil && resp2.StatusCode >= 200 && resp2.StatusCode < 300 && !isHTML(body2) {
+						// v3 worked, use it
+						body = body2
+						resp = resp2
+					} else {
+						// v3 also failed or returned HTML
+						if isHTML(body) && isHTML(body2) {
+							previewLen := 200
+							if len(body) < previewLen {
+								previewLen = len(body)
+							}
+							return nil, fmt.Errorf("both API v2 and v3 returned HTML (endpoints may not exist). v2 response: %s", string(body[:previewLen]))
+						}
+					}
+				}
+			}
+		}
 	}
 
-	// Save to cache
-	c.cache.mu.Lock()
-	if c.cache.Users == nil {
-		c.cache.Users = make(map[string][]User)
+	// Check if we still have an error or HTML response
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			return nil, fmt.Errorf("authentication failed. Your Jira token may be invalid. Please run 'jira init'")
+		}
+		bodyStr := string(body)
+		if isHTML(body) {
+			previewLen := 500
+			if len(bodyStr) < previewLen {
+				previewLen = len(bodyStr)
+			}
+			return nil, fmt.Errorf("Jira API returned HTML instead of JSON (endpoint may not exist). Response preview: %s", bodyStr[:previewLen])
+		}
+		if bodyStr != "" && len(bodyStr) < 500 {
+			return nil, fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
+		}
+		return nil, fmt.Errorf("Jira API returned error: %d %s", resp.StatusCode, resp.Status)
 	}
-	c.cache.Users[query] = users
-	c.cache.mu.Unlock()
-	if err := c.cache.Save(); err != nil {
-		// Log but don't fail - caching is optional
-		_ = err
+
+	// Check if response is HTML even with 200 status
+	if isHTML(body) {
+		previewLen := 500
+		if len(body) < previewLen {
+			previewLen = len(body)
+		}
+		return nil, fmt.Errorf("Jira API returned HTML instead of JSON. The user search endpoint may not be available. Response preview: %s", string(body[:previewLen]))
+	}
+	// Debug: print raw response for first 500 chars if accountId extraction fails
+	var users []User
+	if err := json.Unmarshal(body, &users); err != nil {
+		// If unmarshaling fails, try to see what we got
+		bodyStr := string(body)
+		if len(bodyStr) > 500 {
+			bodyStr = bodyStr[:500] + "..."
+		}
+		return nil, fmt.Errorf("failed to parse response: %w (response: %s)", err, bodyStr)
+	}
+
+
+	// Normalize AccountID - use alternative fields if accountId is empty
+	// Also try to extract from raw JSON if standard fields don't work
+	for i := range users {
+		if users[i].AccountID == "" {
+			if users[i].Key != "" {
+				users[i].AccountID = users[i].Key
+			} else if users[i].AccountIDAlt != "" {
+				users[i].AccountID = users[i].AccountIDAlt
+			} else {
+				// Try to extract accountId from raw JSON response
+				var rawUsers []map[string]interface{}
+				if err := json.Unmarshal(body, &rawUsers); err == nil && i < len(rawUsers) {
+					// Try accountId first (for Cloud)
+					if accountId, ok := rawUsers[i]["accountId"].(string); ok && accountId != "" {
+						users[i].AccountID = accountId
+					} else if accountId, ok := rawUsers[i]["account_id"].(string); ok && accountId != "" {
+						users[i].AccountID = accountId
+					} else if key, ok := rawUsers[i]["key"].(string); ok && key != "" {
+						// Use key for Server/Data Center instances
+						users[i].AccountID = key
+					}
+				}
+			}
+		}
+		// If AccountID is still empty but we have Key, use Key
+		if users[i].AccountID == "" && users[i].Key != "" {
+			users[i].AccountID = users[i].Key
+		}
+	}
+
+	// Save to cache (unless --no-cache is set)
+	if !c.noCache {
+		c.cache.mu.Lock()
+		if c.cache.Users == nil {
+			c.cache.Users = make(map[string][]User)
+		}
+		c.cache.Users[query] = users
+		c.cache.mu.Unlock()
+		if err := c.cache.Save(); err != nil {
+			// Log but don't fail - caching is optional
+			_ = err
+		}
 	}
 
 	return users, nil
@@ -1017,8 +1132,16 @@ func (c *jiraClient) AssignTicket(ticketID, userAccountID string) error {
 	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s/assignee", c.baseURL, ticketID)
 
 	// Construct the JSON payload
-	payload := map[string]interface{}{
-		"accountId": userAccountID,
+	// Jira Cloud uses "accountId", Server/Data Center uses "key" or "name"
+	// If userAccountID looks like a key (starts with "JIRAUSER" or similar), use "key"
+	// Otherwise, try "accountId" first, then fall back to "name" or "key"
+	payload := make(map[string]interface{})
+	if strings.HasPrefix(strings.ToUpper(userAccountID), "JIRAUSER") || strings.HasPrefix(strings.ToUpper(userAccountID), "USER") {
+		// Looks like a Server/Data Center key format
+		payload["key"] = userAccountID
+	} else {
+		// Try accountId first (for Cloud)
+		payload["accountId"] = userAccountID
 	}
 
 	jsonData, err := json.Marshal(payload)
@@ -1054,22 +1177,77 @@ func (c *jiraClient) AssignTicket(ticketID, userAccountID string) error {
 		if resp.StatusCode == 400 {
 			// Try to parse error message from response
 			var apiError struct {
-				ErrorMessages []string `json:"errorMessages"`
+				ErrorMessages []string          `json:"errorMessages"`
 				Errors        map[string]string `json:"errors"`
 			}
 			if err := json.Unmarshal(body, &apiError); err == nil {
+				// Check if error is about accountId not being recognized (Server/Data Center issue)
+				needsKey := false
 				if len(apiError.ErrorMessages) > 0 {
-					return fmt.Errorf("Jira API error: %s", strings.Join(apiError.ErrorMessages, "; "))
+					for _, msg := range apiError.ErrorMessages {
+						if strings.Contains(msg, "accountId") && strings.Contains(msg, "Unrecognized field") {
+							needsKey = true
+							break
+						}
+					}
+				}
+
+				// If accountId is not recognized, retry with "key" instead
+				if needsKey && payload["accountId"] != nil {
+					// Retry with key instead of accountId
+					payload = map[string]interface{}{
+						"key": userAccountID,
+					}
+					jsonData, err := json.Marshal(payload)
+					if err == nil {
+						req, err := http.NewRequest("PUT", endpoint, bytes.NewBuffer(jsonData))
+						if err == nil {
+							req.Header.Set("Content-Type", "application/json")
+							c.setAuth(req)
+
+							resp2, err := c.httpClient.Do(req)
+							if err == nil {
+								defer resp2.Body.Close()
+								if resp2.StatusCode >= 200 && resp2.StatusCode < 300 {
+									// Success with key!
+									return nil
+								}
+								// Still failed, read the error
+								body, _ = io.ReadAll(resp2.Body)
+								bodyStr = string(body)
+							}
+						}
+					}
+				}
+
+				if len(apiError.ErrorMessages) > 0 {
+					errorMsg := strings.Join(apiError.ErrorMessages, "; ")
+					if bodyStr != "" && len(bodyStr) < 500 {
+						return fmt.Errorf("Jira API error: %s\nResponse: %s\nAccount ID used: %s", errorMsg, bodyStr, userAccountID)
+					}
+					return fmt.Errorf("Jira API error: %s\nAccount ID used: %s", errorMsg, userAccountID)
 				}
 				if len(apiError.Errors) > 0 {
 					var errorMsgs []string
 					for k, v := range apiError.Errors {
 						errorMsgs = append(errorMsgs, fmt.Sprintf("%s: %s", k, v))
 					}
-					return fmt.Errorf("Jira API error: %s", strings.Join(errorMsgs, "; "))
+					errorMsg := strings.Join(errorMsgs, "; ")
+					if bodyStr != "" && len(bodyStr) < 500 {
+						return fmt.Errorf("Jira API error: %s\nResponse: %s\nAccount ID used: %s", errorMsg, bodyStr, userAccountID)
+					}
+					return fmt.Errorf("Jira API error: %s\nAccount ID used: %s", errorMsg, userAccountID)
 				}
 			}
-			return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
+			// If parsing failed or no structured errors, show the raw response
+			if bodyStr != "" {
+				// Truncate if too long
+				if len(bodyStr) > 500 {
+					bodyStr = bodyStr[:500] + "..."
+				}
+				return fmt.Errorf("Jira API error (400 Bad Request): %s\nAccount ID used: %s", bodyStr, userAccountID)
+			}
+			return fmt.Errorf("Jira API returned error: %d %s\nAccount ID used: %s", resp.StatusCode, resp.Status, userAccountID)
 		}
 		return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
 	}
@@ -1079,15 +1257,17 @@ func (c *jiraClient) AssignTicket(ticketID, userAccountID string) error {
 
 // GetPriorities retrieves all available priorities
 func (c *jiraClient) GetPriorities() ([]Priority, error) {
-	// Check cache first
-	c.cache.mu.RLock()
-	if len(c.cache.Priorities) > 0 {
-		priorities := make([]Priority, len(c.cache.Priorities))
-		copy(priorities, c.cache.Priorities)
+	// Check cache first (unless --no-cache is set)
+	if !c.noCache {
+		c.cache.mu.RLock()
+		if len(c.cache.Priorities) > 0 {
+			priorities := make([]Priority, len(c.cache.Priorities))
+			copy(priorities, c.cache.Priorities)
+			c.cache.mu.RUnlock()
+			return priorities, nil
+		}
 		c.cache.mu.RUnlock()
-		return priorities, nil
 	}
-	c.cache.mu.RUnlock()
 
 	endpoint := fmt.Sprintf("%s/rest/api/2/priority", c.baseURL)
 
@@ -1122,13 +1302,15 @@ func (c *jiraClient) GetPriorities() ([]Priority, error) {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	// Save to cache
-	c.cache.mu.Lock()
-	c.cache.Priorities = priorities
-	c.cache.mu.Unlock()
-	if err := c.cache.Save(); err != nil {
-		// Log but don't fail - caching is optional
-		_ = err
+	// Save to cache (unless --no-cache is set)
+	if !c.noCache {
+		c.cache.mu.Lock()
+		c.cache.Priorities = priorities
+		c.cache.mu.Unlock()
+		if err := c.cache.Save(); err != nil {
+			// Log but don't fail - caching is optional
+			_ = err
+		}
 	}
 
 	return priorities, nil
