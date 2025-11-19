@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"go-jira-helper/pkg/jira"
+	"github.com/beekhof/jira-tool/pkg/jira"
 
 	"github.com/spf13/cobra"
 )

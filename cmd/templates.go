@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"go-jira-helper/pkg/gemini"
+	"github.com/beekhof/jira-tool/pkg/gemini"
 
 	"github.com/spf13/cobra"
 )

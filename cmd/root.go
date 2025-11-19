@@ -14,7 +14,7 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "jira",
 	Short: "A CLI tool to streamline Jira workflows",
-	Long: `go-jira-helper is a command-line tool that helps you manage Jira tickets
+	Long: `jira-tool is a command-line tool that helps you manage Jira tickets
 more efficiently by integrating with Jira and Gemini APIs.`,
 }
 

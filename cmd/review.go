@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"strings"
 
-	"go-jira-helper/pkg/config"
-	"go-jira-helper/pkg/editor"
-	"go-jira-helper/pkg/gemini"
-	"go-jira-helper/pkg/jira"
-	"go-jira-helper/pkg/qa"
+	"github.com/beekhof/jira-tool/pkg/config"
+	"github.com/beekhof/jira-tool/pkg/editor"
+	"github.com/beekhof/jira-tool/pkg/gemini"
+	"github.com/beekhof/jira-tool/pkg/jira"
+	"github.com/beekhof/jira-tool/pkg/qa"
 
 	"github.com/spf13/cobra"
 )

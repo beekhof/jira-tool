@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"time"
 
-	"go-jira-helper/pkg/config"
-	"go-jira-helper/pkg/credentials"
+	"github.com/beekhof/jira-tool/pkg/config"
+	"github.com/beekhof/jira-tool/pkg/credentials"
 )
 
 // JiraClient defines the interface for Jira operations

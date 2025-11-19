@@ -7,8 +7,8 @@ import (
 	"strings"
 	"syscall"
 
-	"go-jira-helper/pkg/config"
-	"go-jira-helper/pkg/credentials"
+	"github.com/beekhof/jira-tool/pkg/config"
+	"github.com/beekhof/jira-tool/pkg/credentials"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"

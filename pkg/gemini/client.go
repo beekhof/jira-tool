@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"go-jira-helper/pkg/config"
-	"go-jira-helper/pkg/credentials"
+	"github.com/beekhof/jira-tool/pkg/config"
+	"github.com/beekhof/jira-tool/pkg/credentials"
 )
 
 // GeminiClient defines the interface for Gemini operations

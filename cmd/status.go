@@ -5,9 +5,9 @@ import (
 	"sort"
 	"time"
 
-	"go-jira-helper/pkg/config"
-	"go-jira-helper/pkg/gemini"
-	"go-jira-helper/pkg/jira"
+	"github.com/beekhof/jira-tool/pkg/config"
+	"github.com/beekhof/jira-tool/pkg/gemini"
+	"github.com/beekhof/jira-tool/pkg/jira"
 
 	"github.com/spf13/cobra"
 )

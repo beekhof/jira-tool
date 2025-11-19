@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"go-jira-helper/cmd"
+	"github.com/beekhof/jira-tool/cmd"
 )
 
 func main() {

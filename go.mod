@@ -1,4 +1,4 @@
-module go-jira-helper
+module github.com/beekhof/jira-tool
 
 go 1.21
 

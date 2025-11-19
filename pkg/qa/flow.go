@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"go-jira-helper/pkg/gemini"
+	"github.com/beekhof/jira-tool/pkg/gemini"
 )
 
 // RunQnAFlow runs the interactive Q&A flow with Gemini
