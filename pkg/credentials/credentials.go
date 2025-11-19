@@ -15,15 +15,15 @@ type Credentials struct {
 }
 
 // GetCredentialsPath returns the path for the credentials file
-// If configDir is empty, uses the default ~/.jira-helper
+// If configDir is empty, uses the default ~/.jira-tool
 func GetCredentialsPath(configDir string) string {
 	if configDir == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			// Fallback to current directory if home dir cannot be determined
-			return "./.jira-helper/credentials.yaml"
+			return "./.jira-tool/credentials.yaml"
 		}
-		configDir = filepath.Join(homeDir, ".jira-helper")
+		configDir = filepath.Join(homeDir, ".jira-tool")
 	}
 	return filepath.Join(configDir, "credentials.yaml")
 }
@@ -78,9 +78,9 @@ func StoreSecret(service, user, secret, configDir string) error {
 	}
 
 	// Store based on service type
-	if service == "jira-helper-jira" {
+	if service == "jira-tool-jira" {
 		creds.JiraToken = secret
-	} else if service == "jira-helper-gemini" {
+	} else if service == "jira-tool-gemini" {
 		creds.GeminiKey = secret
 	} else {
 		return fmt.Errorf("unknown service: %s", service)
@@ -100,14 +100,14 @@ func GetSecret(service, user, configDir string) (string, error) {
 		return "", fmt.Errorf("failed to load credentials: %w. Please run 'jira init'", err)
 	}
 
-	if service == "jira-helper-jira" {
+	if service == "jira-tool-jira" {
 		if creds.JiraToken == "" {
-			return "", fmt.Errorf("Jira token not found. Please run 'jira init'")
+			return "", fmt.Errorf("jira token not found. Please run 'jira init'")
 		}
 		return creds.JiraToken, nil
-	} else if service == "jira-helper-gemini" {
+	} else if service == "jira-tool-gemini" {
 		if creds.GeminiKey == "" {
-			return "", fmt.Errorf("Gemini key not found. Please run 'jira init'")
+			return "", fmt.Errorf("gemini key not found. Please run 'jira init'")
 		}
 		return creds.GeminiKey, nil
 	}
@@ -117,6 +117,6 @@ func GetSecret(service, user, configDir string) (string, error) {
 
 // Constants for backward compatibility
 const (
-	JiraServiceKey   = "jira-helper-jira"
-	GeminiServiceKey = "jira-helper-gemini"
+	JiraServiceKey   = "jira-tool-jira"
+	GeminiServiceKey = "jira-tool-gemini"
 )

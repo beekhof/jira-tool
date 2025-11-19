@@ -157,7 +157,7 @@ type jiraClient struct {
 }
 
 // NewClient creates a new Jira client by loading config and credentials
-// configDir can be empty to use the default ~/.jira-helper
+// configDir can be empty to use the default ~/.jira-tool
 func NewClient(configDir string) (JiraClient, error) {
 	configPath := config.GetConfigPath(configDir)
 	cfg, err := config.LoadConfig(configPath)

@@ -80,7 +80,7 @@ func ListModels(configDir string) ([]ModelInfo, error) {
 }
 
 // NewClient creates a new Gemini client
-// configDir can be empty to use the default ~/.jira-helper
+// configDir can be empty to use the default ~/.jira-tool
 func NewClient(configDir string) (GeminiClient, error) {
 	// Get API key from credentials
 	// We use a dummy user since we store by service, not user

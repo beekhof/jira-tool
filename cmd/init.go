@@ -16,8 +16,8 @@ import (
 
 var initCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Initialize the jira-helper configuration",
-	Long: `Initialize the jira-helper by prompting for Jira URL, API token,
+	Short: "Initialize the jira-tool configuration",
+	Long: `Initialize the jira-tool by prompting for Jira URL, API token,
 	and Gemini API key. Non-sensitive data is saved to config.yaml, while
 	API keys are stored in a credentials file.`,
 	RunE: runInit,

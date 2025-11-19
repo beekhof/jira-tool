@@ -19,14 +19,14 @@ type Cache struct {
 }
 
 // GetCachePath returns the path for the cache file
-// If configDir is empty, uses the default ~/.jira-helper
+// If configDir is empty, uses the default ~/.jira-tool
 func GetCachePath(configDir string) string {
 	if configDir == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return "./.jira-helper/cache.json"
+			return "./.jira-tool/cache.json"
 		}
-		configDir = filepath.Join(homeDir, ".jira-helper")
+		configDir = filepath.Join(homeDir, ".jira-tool")
 	}
 	return filepath.Join(configDir, "cache.json")
 }

@@ -27,15 +27,15 @@ type Config struct {
 }
 
 // GetConfigPath returns the path for the config file
-// If configDir is empty, uses the default ~/.jira-helper
+// If configDir is empty, uses the default ~/.jira-tool
 func GetConfigPath(configDir string) string {
 	if configDir == "" {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
 			// Fallback to current directory if home dir cannot be determined
-			return "./.jira-helper/config.yaml"
+			return "./.jira-tool/config.yaml"
 		}
-		configDir = filepath.Join(homeDir, ".jira-helper")
+		configDir = filepath.Join(homeDir, ".jira-tool")
 	}
 	return filepath.Join(configDir, "config.yaml")
 }

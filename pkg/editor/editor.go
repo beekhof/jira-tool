@@ -11,7 +11,7 @@ import (
 // OpenInEditor opens the given content in the system editor and returns the edited content
 func OpenInEditor(initialContent string) (string, error) {
 	// Create a temporary file
-	tmpFile, err := os.CreateTemp("", "jira-helper-*.md")
+	tmpFile, err := os.CreateTemp("", "jira-tool-*.md")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
