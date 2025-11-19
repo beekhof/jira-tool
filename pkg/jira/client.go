@@ -24,6 +24,7 @@ type JiraClient interface {
 	SearchTickets(jql string) ([]Issue, error)
 	SearchUsers(query string) ([]User, error)
 	AssignTicket(ticketID, userAccountID string) error
+	UnassignTicket(ticketID string) error
 	GetPriorities() ([]Priority, error)
 	TransitionTicket(ticketID, transitionID string) error
 	GetTicketDescription(ticketID string) (string, error)
@@ -1247,6 +1248,126 @@ func (c *jiraClient) AssignTicket(ticketID, userAccountID string) error {
 				return fmt.Errorf("Jira API error (400 Bad Request): %s\nAccount ID used: %s", bodyStr, userAccountID)
 			}
 			return fmt.Errorf("Jira API returned error: %d %s\nAccount ID used: %s", resp.StatusCode, resp.Status, userAccountID)
+		}
+		return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
+	}
+
+	return nil
+}
+
+// UnassignTicket unassigns a ticket (removes the current assignee)
+func (c *jiraClient) UnassignTicket(ticketID string) error {
+	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s/assignee", c.baseURL, ticketID)
+
+	// Construct the JSON payload - set assignee to null
+	// Try accountId: null first (for Cloud), fallback to key: null for Server/Data Center
+	payload := map[string]interface{}{
+		"accountId": nil,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("PUT", endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	c.setAuth(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		// Read response body for more details
+		body, _ := io.ReadAll(resp.Body)
+		bodyStr := string(body)
+
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			return fmt.Errorf("authentication failed. Your Jira token may be invalid. Please run 'jira utils init'")
+		}
+		if resp.StatusCode == 404 {
+			return fmt.Errorf("ticket %s not found", ticketID)
+		}
+		if resp.StatusCode == 400 {
+			// Try to parse error message from response
+			var apiError struct {
+				ErrorMessages []string          `json:"errorMessages"`
+				Errors        map[string]string `json:"errors"`
+			}
+			if err := json.Unmarshal(body, &apiError); err == nil {
+				// Check if error is about accountId not being recognized (Server/Data Center issue)
+				needsKey := false
+				if len(apiError.ErrorMessages) > 0 {
+					for _, msg := range apiError.ErrorMessages {
+						if strings.Contains(msg, "accountId") && strings.Contains(msg, "Unrecognized field") {
+							needsKey = true
+							break
+						}
+					}
+				}
+
+				// If accountId is not recognized, retry with "key": null for Server/Data Center
+				if needsKey {
+					payload = map[string]interface{}{
+						"key": nil,
+					}
+					jsonData, err := json.Marshal(payload)
+					if err == nil {
+						req, err := http.NewRequest("PUT", endpoint, bytes.NewBuffer(jsonData))
+						if err == nil {
+							req.Header.Set("Content-Type", "application/json")
+							c.setAuth(req)
+
+							resp2, err := c.httpClient.Do(req)
+							if err == nil {
+								defer resp2.Body.Close()
+								if resp2.StatusCode >= 200 && resp2.StatusCode < 300 {
+									// Success with key!
+									return nil
+								}
+								// Still failed, read the error
+								body, _ = io.ReadAll(resp2.Body)
+								bodyStr = string(body)
+							}
+						}
+					}
+				}
+
+				if len(apiError.ErrorMessages) > 0 {
+					errorMsg := strings.Join(apiError.ErrorMessages, "; ")
+					if bodyStr != "" && len(bodyStr) < 500 {
+						return fmt.Errorf("Jira API error: %s\nResponse: %s", errorMsg, bodyStr)
+					}
+					return fmt.Errorf("Jira API error: %s", errorMsg)
+				}
+				if len(apiError.Errors) > 0 {
+					var errorMsgs []string
+					for k, v := range apiError.Errors {
+						errorMsgs = append(errorMsgs, fmt.Sprintf("%s: %s", k, v))
+					}
+					errorMsg := strings.Join(errorMsgs, "; ")
+					if bodyStr != "" && len(bodyStr) < 500 {
+						return fmt.Errorf("Jira API error: %s\nResponse: %s", errorMsg, bodyStr)
+					}
+					return fmt.Errorf("Jira API error: %s", errorMsg)
+				}
+			}
+			// If parsing failed or no structured errors, show the raw response
+			if bodyStr != "" {
+				// Truncate if too long
+				if len(bodyStr) > 500 {
+					bodyStr = bodyStr[:500] + "..."
+				}
+				return fmt.Errorf("Jira API error (400 Bad Request): %s", bodyStr)
+			}
+			return fmt.Errorf("Jira API returned error: %d %s", resp.StatusCode, resp.Status)
 		}
 		return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
 	}
