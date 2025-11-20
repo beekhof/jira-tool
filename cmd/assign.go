@@ -13,6 +13,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// getAssigneeName is defined in review.go, but we need it here too
+// We'll import it from review.go by keeping it in the same package
+
 var (
 	unassignFlag bool
 	allFlag      bool
@@ -81,7 +84,22 @@ func assignSingleTicket(client jira.JiraClient, cfg *config.Config, ticketID str
 	}
 
 	reader := bufio.NewReader(os.Stdin)
-	return handleAssign(client, reader, cfg, ticketID)
+	if err := handleAssign(client, reader, cfg, ticketID); err != nil {
+		return err
+	}
+
+	// Verify assignment
+	updated, err := client.SearchTickets(fmt.Sprintf("key = %s", ticketID))
+	if err == nil && len(updated) > 0 {
+		assignee := getAssigneeName(updated[0])
+		if assignee != "Unassigned" {
+			fmt.Printf("Assigned %s successfully to %s.\n", ticketID, assignee)
+		} else {
+			return fmt.Errorf("assignment reported success but ticket %s is still unassigned", ticketID)
+		}
+	}
+
+	return nil
 }
 
 // assignMultipleTickets shows a paginated list and allows selecting tickets to assign
@@ -316,7 +334,18 @@ func assignSelectedTickets(client jira.JiraClient, cfg *config.Config, allIssues
 			continue
 		}
 
-		fmt.Printf("Assigned %s successfully.\n\n", ticket.Key)
+		// Verify assignment by fetching the ticket
+		updated, err := client.SearchTickets(fmt.Sprintf("key = %s", ticket.Key))
+		if err == nil && len(updated) > 0 {
+			assignee := getAssigneeName(updated[0])
+			if assignee != "Unassigned" {
+				fmt.Printf("Assigned %s successfully to %s.\n\n", ticket.Key, assignee)
+			} else {
+				fmt.Printf("Warning: %s assignment reported success but ticket is still unassigned.\n\n", ticket.Key)
+			}
+		} else {
+			fmt.Printf("Assigned %s successfully (could not verify).\n\n", ticket.Key)
+		}
 	}
 
 	fmt.Println("Assignment complete!")

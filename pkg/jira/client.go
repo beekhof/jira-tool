@@ -1208,13 +1208,35 @@ func (c *jiraClient) AssignTicket(ticketID, userAccountID string) error {
 							resp2, err := c.httpClient.Do(req)
 							if err == nil {
 								defer resp2.Body.Close()
+								body2, _ := io.ReadAll(resp2.Body)
+								bodyStr2 := string(body2)
+								
 								if resp2.StatusCode >= 200 && resp2.StatusCode < 300 {
+									// Check if body contains error messages even with success status
+									if bodyStr2 != "" && (strings.Contains(bodyStr2, "\"errorMessages\"") || strings.Contains(bodyStr2, "\"errors\"")) {
+										// Try to parse as error
+										var apiError2 struct {
+											ErrorMessages []string          `json:"errorMessages"`
+											Errors        map[string]string `json:"errors"`
+										}
+										if err := json.Unmarshal(body2, &apiError2); err == nil {
+											if len(apiError2.ErrorMessages) > 0 || len(apiError2.Errors) > 0 {
+												var errorMsgs []string
+												errorMsgs = append(errorMsgs, apiError2.ErrorMessages...)
+												for k, v := range apiError2.Errors {
+													errorMsgs = append(errorMsgs, fmt.Sprintf("%s: %s", k, v))
+												}
+												return fmt.Errorf("Jira API returned error in response body: %s\nAccount ID used: %s", strings.Join(errorMsgs, "; "), userAccountID)
+											}
+										}
+									}
 									// Success with key!
 									return nil
 								}
-								// Still failed, read the error
-								body, _ = io.ReadAll(resp2.Body)
-								bodyStr = string(body)
+								// Still failed, use the error from resp2
+								body = body2
+								bodyStr = bodyStr2
+								resp = resp2
 							}
 						}
 					}
@@ -1252,7 +1274,42 @@ func (c *jiraClient) AssignTicket(ticketID, userAccountID string) error {
 		return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
 	}
 
-	return nil
+	// Read response body even on success to check for any error messages
+	body, err := io.ReadAll(resp.Body)
+	if err == nil && len(body) > 0 {
+		bodyStr := string(body)
+		// Check if body contains error messages even with success status
+		if strings.Contains(bodyStr, "\"errorMessages\"") || strings.Contains(bodyStr, "\"errors\"") {
+			// Try to parse as error
+			var apiError struct {
+				ErrorMessages []string          `json:"errorMessages"`
+				Errors        map[string]string `json:"errors"`
+			}
+			if err := json.Unmarshal(body, &apiError); err == nil {
+				if len(apiError.ErrorMessages) > 0 || len(apiError.Errors) > 0 {
+					var errorMsgs []string
+					errorMsgs = append(errorMsgs, apiError.ErrorMessages...)
+					for k, v := range apiError.Errors {
+						errorMsgs = append(errorMsgs, fmt.Sprintf("%s: %s", k, v))
+					}
+					return fmt.Errorf("Jira API returned error in response body: %s\nAccount ID used: %s", strings.Join(errorMsgs, "; "), userAccountID)
+				}
+			}
+		}
+	}
+
+	// Jira API typically returns 204 No Content for successful assignment
+	// But 200 OK is also acceptable
+	if resp.StatusCode == 204 || resp.StatusCode == 200 {
+		return nil
+	}
+
+	// If we get here with a 2xx status but not 200/204, log it but consider it success
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+
+	return fmt.Errorf("unexpected status code: %d %s", resp.StatusCode, resp.Status)
 }
 
 // UnassignTicket unassigns a ticket (removes the current assignee)
