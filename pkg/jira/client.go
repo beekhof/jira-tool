@@ -23,7 +23,7 @@ type JiraClient interface {
 	CreateTicketWithParent(project, taskType, summary, parentKey string) (string, error)
 	SearchTickets(jql string) ([]Issue, error)
 	SearchUsers(query string) ([]User, error)
-	AssignTicket(ticketID, userAccountID string) error
+	AssignTicket(ticketID, userAccountID, userName string) error
 	UnassignTicket(ticketID string) error
 	GetPriorities() ([]Priority, error)
 	TransitionTicket(ticketID, transitionID string) error
@@ -38,6 +38,7 @@ type JiraClient interface {
 	GetReleases(projectKey string) ([]ReleaseParsed, error)
 	GetIssuesForSprint(sprintID int) ([]Issue, error)
 	GetIssuesForRelease(releaseID string) ([]Issue, error)
+	GetTicketRaw(ticketID string) (map[string]interface{}, error)
 }
 
 // Attachment represents a Jira attachment
@@ -136,6 +137,9 @@ type Issue struct {
 			AccountID    string `json:"accountId"`
 			DisplayName  string `json:"displayName"`
 			EmailAddress string `json:"emailAddress"`
+			Key          string `json:"key"`    // Server/Data Center uses "key"
+			Name         string `json:"name"`   // Some instances use "name"
+			Active       bool   `json:"active"` // User active status
 		} `json:"assignee"`
 		StoryPoints float64 `json:"customfield_10016"`
 	} `json:"fields"`
@@ -545,6 +549,44 @@ func (c *jiraClient) TransitionTicket(ticketID, transitionID string) error {
 	}
 
 	return nil
+}
+
+// GetTicketRaw fetches a ticket with all fields for debugging
+func (c *jiraClient) GetTicketRaw(ticketID string) (map[string]interface{}, error) {
+	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s", c.baseURL, ticketID)
+
+	req, err := http.NewRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/json")
+	c.setAuth(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == 404 {
+			return nil, fmt.Errorf("ticket %s not found", ticketID)
+		}
+		return nil, fmt.Errorf("Jira API returned error: %d %s", resp.StatusCode, resp.Status)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var issueData map[string]interface{}
+	if err := json.Unmarshal(body, &issueData); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return issueData, nil
 }
 
 // GetTicketDescription gets the description of a ticket
@@ -1076,36 +1118,6 @@ func (c *jiraClient) SearchUsers(query string) ([]User, error) {
 		return nil, fmt.Errorf("failed to parse response: %w (response: %s)", err, bodyStr)
 	}
 
-	// Normalize AccountID - use alternative fields if accountId is empty
-	// Also try to extract from raw JSON if standard fields don't work
-	for i := range users {
-		if users[i].AccountID == "" {
-			if users[i].Key != "" {
-				users[i].AccountID = users[i].Key
-			} else if users[i].AccountIDAlt != "" {
-				users[i].AccountID = users[i].AccountIDAlt
-			} else {
-				// Try to extract accountId from raw JSON response
-				var rawUsers []map[string]interface{}
-				if err := json.Unmarshal(body, &rawUsers); err == nil && i < len(rawUsers) {
-					// Try accountId first (for Cloud)
-					if accountId, ok := rawUsers[i]["accountId"].(string); ok && accountId != "" {
-						users[i].AccountID = accountId
-					} else if accountId, ok := rawUsers[i]["account_id"].(string); ok && accountId != "" {
-						users[i].AccountID = accountId
-					} else if key, ok := rawUsers[i]["key"].(string); ok && key != "" {
-						// Use key for Server/Data Center instances
-						users[i].AccountID = key
-					}
-				}
-			}
-		}
-		// If AccountID is still empty but we have Key, use Key
-		if users[i].AccountID == "" && users[i].Key != "" {
-			users[i].AccountID = users[i].Key
-		}
-	}
-
 	// Save to cache (unless --no-cache is set)
 	if !c.noCache {
 		c.cache.mu.Lock()
@@ -1124,21 +1136,19 @@ func (c *jiraClient) SearchUsers(query string) ([]User, error) {
 }
 
 // AssignTicket assigns a ticket to a user
-func (c *jiraClient) AssignTicket(ticketID, userAccountID string) error {
-	if userAccountID == "" {
-		return fmt.Errorf("user account ID cannot be empty")
-	}
-
+// userAccountID can be an accountId, key, or name (email). If empty, userName will be used as the name field.
+func (c *jiraClient) AssignTicket(ticketID, userAccountID, userName string) error {
 	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s/assignee", c.baseURL, ticketID)
 
 	// Construct the JSON payload
 	// Jira Cloud uses "accountId", Server/Data Center uses "key" or "name"
-	// If userAccountID looks like a key (starts with "JIRAUSER" or similar), use "key"
-	// Otherwise, try "accountId" first, then fall back to "name" or "key"
 	payload := make(map[string]interface{})
-	if strings.HasPrefix(strings.ToUpper(userAccountID), "JIRAUSER") || strings.HasPrefix(strings.ToUpper(userAccountID), "USER") {
-		// Looks like a Server/Data Center key format
-		payload["key"] = userAccountID
+	if userAccountID == "" {
+		if userName == "" {
+			return fmt.Errorf("user account ID and user name cannot both be empty")
+		}
+		// Use name field when userAccountID is empty
+		payload["name"] = userName
 	} else {
 		// Try accountId first (for Cloud)
 		payload["accountId"] = userAccountID
@@ -1210,7 +1220,7 @@ func (c *jiraClient) AssignTicket(ticketID, userAccountID string) error {
 								defer resp2.Body.Close()
 								body2, _ := io.ReadAll(resp2.Body)
 								bodyStr2 := string(body2)
-								
+
 								if resp2.StatusCode >= 200 && resp2.StatusCode < 300 {
 									// Check if body contains error messages even with success status
 									if bodyStr2 != "" && (strings.Contains(bodyStr2, "\"errorMessages\"") || strings.Contains(bodyStr2, "\"errors\"")) {

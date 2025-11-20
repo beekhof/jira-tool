@@ -366,7 +366,7 @@ func handleAssign(client jira.JiraClient, reader *bufio.Reader, cfg *config.Conf
 			if len(users) == 0 {
 				return fmt.Errorf("user not found: %s", fav)
 			}
-			return client.AssignTicket(ticketID, users[0].AccountID)
+			return client.AssignTicket(ticketID, users[0].AccountID, users[0].Name)
 		}
 	}
 
@@ -390,7 +390,7 @@ func handleAssign(client jira.JiraClient, reader *bufio.Reader, cfg *config.Conf
 	// Show results
 	fmt.Println("Found users:")
 	for i, user := range users {
-		fmt.Printf("[%d] %s (%s) [AccountID: %s]\n", i+1, user.DisplayName, user.EmailAddress, user.AccountID)
+		fmt.Printf("[%d] %s (%s) [AccountID: %s]\n", i+1, user.DisplayName, user.Name, user.AccountID)
 	}
 	fmt.Print("Select user number: ")
 
@@ -410,11 +410,7 @@ func handleAssign(client jira.JiraClient, reader *bufio.Reader, cfg *config.Conf
 
 	selectedUser := users[selected-1]
 
-	if selectedUser.AccountID == "" {
-		return fmt.Errorf("selected user %s (%s) has no accountId. This may be a Jira API issue.", selectedUser.DisplayName, selectedUser.EmailAddress)
-	}
-
-	return client.AssignTicket(ticketID, selectedUser.AccountID)
+	return client.AssignTicket(ticketID, selectedUser.AccountID, selectedUser.Name)
 }
 
 func handleTriage(client jira.JiraClient, reader *bufio.Reader, ticketID string) error {
