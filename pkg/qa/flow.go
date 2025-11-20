@@ -58,6 +58,10 @@ func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions 
 		return "", fmt.Errorf("failed to generate description: %w", err)
 	}
 
+	// Add footer to the description
+	footer := "\n\n---\n\n_This description was generated based on human answers to a limited number of robot questions related to the summary._"
+	description = description + footer
+
 	return description, nil
 }
 
