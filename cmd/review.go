@@ -20,6 +20,8 @@ var (
 	needsDetailFlag bool
 	unassignedFlag  bool
 	untriagedFlag   bool
+	pageSizeFlag    int
+	noPagingFlag    bool
 )
 
 var reviewCmd = &cobra.Command{
@@ -117,10 +119,18 @@ func runReview(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Get page size from config (default 10)
-	pageSize := cfg.ReviewPageSize
+	// Determine page size: command flag > config > default
+	pageSize := pageSizeFlag
 	if pageSize <= 0 {
-		pageSize = 10
+		pageSize = cfg.ReviewPageSize
+		if pageSize <= 0 {
+			pageSize = 10
+		}
+	}
+	
+	// If no-paging flag is set, set page size to total number of issues
+	if noPagingFlag {
+		pageSize = len(issues)
 	}
 
 	reader := bufio.NewReader(os.Stdin)
@@ -591,5 +601,7 @@ func init() {
 	reviewCmd.Flags().BoolVar(&needsDetailFlag, "needs-detail", false, "Show only tickets that need detail")
 	reviewCmd.Flags().BoolVar(&unassignedFlag, "unassigned", false, "Show only unassigned tickets")
 	reviewCmd.Flags().BoolVar(&untriagedFlag, "untriaged", false, "Show only untriaged tickets")
+	reviewCmd.Flags().IntVar(&pageSizeFlag, "page-size", 0, "Number of tickets per page (0 = use config default)")
+	reviewCmd.Flags().BoolVar(&noPagingFlag, "no-paging", false, "Disable paging and show all tickets at once")
 	rootCmd.AddCommand(reviewCmd)
 }
