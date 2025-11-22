@@ -35,7 +35,7 @@ This installs the binary to your system PATH.
 
 1. **Initialize the tool**:
    ```bash
-   jira init
+   jira utils init
    ```
    This will prompt you for:
    - Jira URL
@@ -94,14 +94,14 @@ favorite_releases:
 - **`default_task_type`** (required): Default issue type (e.g., "Task", "Story", "Bug")
 - **`story_point_options`** (optional): List of story point values for estimation (default: Fibonacci sequence)
 - **`story_points_field_id`** (optional): Custom field ID for story points in your Jira instance (default: `customfield_10016`)
-  - **Automatically detected during `jira init`**: The tool will query your Jira instance to find the story points field
+  - **Automatically detected during `jira utils init`**: The tool will query your Jira instance to find the story points field
   - If automatic detection fails, it falls back to `customfield_10016`
   - You can manually configure it in your config file if needed
 
 #### Gemini AI Settings
 
 - **`gemini_model`** (optional): Gemini model to use (default: `gemini-2.5-flash`)
-  - Available models can be listed with: `jira models`
+  - Available models can be listed with: `jira utils models`
   - Common options: `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-2.0-flash`
 - **`max_questions`** (optional): Maximum number of questions in Q&A flow (default: `4`)
 - **`review_page_size`** (optional): Number of tickets per page in review command (default: `10`)
@@ -199,7 +199,7 @@ If not specified, the tool uses built-in defaults:
 
 To view the default templates in YAML format, run:
 ```bash
-jira templates
+jira utils templates
 ```
 
 ### Custom Configuration Directory
@@ -212,11 +212,11 @@ jira --config-dir /path/to/config create "My ticket"
 
 ## Commands
 
-### `init`
+### `utils init`
 Initialize the tool configuration and store API credentials.
 
 ```bash
-jira init
+jira utils init
 ```
 
 ### `create [SUMMARY]`
@@ -232,11 +232,17 @@ jira create --project ENG --type Bug "Critical security issue"
 - `--type, -t`: Override default task type
 
 ### `estimate [TICKET_ID]`
-Estimate story points for a ticket.
+Estimate story points for a ticket. If no ticket ID is provided, shows a paginated list of tickets without story points.
 
 ```bash
 jira estimate ENG-123
+jira estimate  # Shows list of tickets without story points
 ```
+
+**Features:**
+- AI-powered story point suggestions using Gemini
+- Interactive selection with letter keys (a, b, c, etc.) or direct numerical input
+- Supports estimating multiple tickets when called without a ticket ID
 
 ### `status`
 Display status for sprints, releases, or spike tickets.
@@ -283,6 +289,25 @@ jira review --untriaged
 - `--unassigned`: Show only unassigned tickets
 - `--untriaged`: Show only untriaged tickets
 
+### `assign [TICKET_ID]`
+Assign or unassign a Jira ticket.
+
+```bash
+jira assign ENG-123              # Assign a specific ticket
+jira assign                      # Show paginated list of unassigned tickets in Backlog
+jira assign --all                # Show all unassigned tickets
+jira assign --state "To Do"      # Filter by specific state
+jira assign --unassign           # Unassign tickets instead of assigning
+jira assign --unassign ENG-123   # Unassign a specific ticket
+```
+
+**Features:**
+- By default, shows tickets in "Backlog" state when assigning
+- By default, shows assigned tickets when unassigning
+- Supports filtering by state with `--state` flag
+- Supports showing all tickets with `--all` flag
+- Interactive user selection with favorites support
+
 ### `accept [TICKET_ID]`
 Convert a research ticket into an Epic and tasks.
 
@@ -290,28 +315,55 @@ Convert a research ticket into an Epic and tasks.
 jira accept ENG-456
 ```
 
-### `refresh`
+### `utils`
+Utility commands for configuration, debugging, and maintenance.
+
+#### `utils init`
+Initialize the tool configuration and store API credentials.
+
+```bash
+jira utils init
+```
+
+#### `utils refresh`
 Clear the local cache to force fresh data from Jira.
 
 ```bash
-jira refresh
+jira utils refresh
 ```
 
-### `models`
+#### `utils models`
 List available Gemini models that support `generateContent`.
 
 ```bash
-jira models
+jira utils models
 ```
 
-### `templates`
+#### `utils templates`
 Display the default prompt templates in YAML format that can be copied into your config file.
 
 ```bash
-jira templates
+jira utils templates
 ```
 
 This command outputs all four default templates (`question_prompt_template`, `description_prompt_template`, `spike_question_prompt_template`, and `spike_prompt_template`) in a format ready to be copied into your `config.yaml` file for customization.
+
+#### `utils completion [SHELL]`
+Generate shell completion scripts for bash, zsh, fish, or powershell.
+
+```bash
+jira utils completion bash
+jira utils completion zsh
+jira utils completion fish
+jira utils completion powershell
+```
+
+#### `utils debug [TICKET_ID]`
+Debug command to show raw ticket data including assignee field structure.
+
+```bash
+jira utils debug ENG-123
+```
 
 ## Authentication
 
@@ -321,12 +373,22 @@ The tool uses Bearer token authentication for Jira. Your API token is stored sec
 1. Go to your Jira account settings
 2. Navigate to Security → API tokens
 3. Create a new API token
-4. Use this token during `jira init`
+4. Use this token during `jira utils init`
 
 **Getting a Gemini API Key:**
 1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
 2. Create a new API key
-3. Use this key during `jira init`
+3. Use this key during `jira utils init`
+
+## Global Flags
+
+- **`--config-dir`**: Specify a custom configuration directory (default: `~/.jira-tool`)
+- **`--no-cache`**: Bypass cache and fetch fresh data from API (useful for testing and debugging)
+
+Example:
+```bash
+jira --no-cache --config-dir /path/to/config review
+```
 
 ## Error Handling
 
