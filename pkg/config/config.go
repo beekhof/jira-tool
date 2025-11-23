@@ -20,9 +20,9 @@ type Config struct {
 	SpikeQuestionPromptTemplate string `yaml:"spike_question_prompt_template,omitempty"`
 	SpikePromptTemplate    string   `yaml:"spike_prompt_template,omitempty"`
 	ReviewPageSize         int      `yaml:"review_page_size,omitempty"`
-	FavoriteAssignees      []string `yaml:"favorite_assignees,omitempty"`
-	FavoriteSprints        []string `yaml:"favorite_sprints,omitempty"`
-	FavoriteReleases       []string `yaml:"favorite_releases,omitempty"`
+	RecentAssignees        []string `yaml:"recent_assignees,omitempty"`        // Last 6 unique users selected
+	RecentSprints          []string `yaml:"recent_sprints,omitempty"`          // Last 6 unique sprints selected
+	RecentReleases         []string `yaml:"recent_releases,omitempty"`         // Last 6 unique releases selected
 	StoryPointOptions      []int    `yaml:"story_point_options,omitempty"`
 	StoryPointsFieldID     string   `yaml:"story_points_field_id,omitempty"`
 }

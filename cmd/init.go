@@ -170,9 +170,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 		if len(cfg.StoryPointOptions) == 0 {
 			cfg.StoryPointOptions = existingCfg.StoryPointOptions
 		}
-		cfg.FavoriteAssignees = existingCfg.FavoriteAssignees
-		cfg.FavoriteSprints = existingCfg.FavoriteSprints
-		cfg.FavoriteReleases = existingCfg.FavoriteReleases
+		cfg.RecentAssignees = existingCfg.RecentAssignees
+		cfg.RecentSprints = existingCfg.RecentSprints
+		cfg.RecentReleases = existingCfg.RecentReleases
 		cfg.QuestionPromptTemplate = existingCfg.QuestionPromptTemplate
 		cfg.DescriptionPromptTemplate = existingCfg.DescriptionPromptTemplate
 		cfg.SpikeQuestionPromptTemplate = existingCfg.SpikeQuestionPromptTemplate

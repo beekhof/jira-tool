@@ -73,6 +73,9 @@ func runAssign(cmd *cobra.Command, args []string) error {
 
 // assignSingleTicket assigns a single ticket
 func assignSingleTicket(client jira.JiraClient, cfg *config.Config, ticketID string) error {
+	configDir := GetConfigDir()
+	configPath := config.GetConfigPath(configDir)
+	
 	// Fetch ticket details
 	fmt.Printf("Fetching ticket details for %s...\n", ticketID)
 	issues, err := client.SearchTickets(fmt.Sprintf("key = %s", ticketID))
@@ -84,7 +87,7 @@ func assignSingleTicket(client jira.JiraClient, cfg *config.Config, ticketID str
 	}
 
 	reader := bufio.NewReader(os.Stdin)
-	if err := handleAssign(client, reader, cfg, ticketID); err != nil {
+	if err := handleAssign(client, reader, cfg, ticketID, configPath); err != nil {
 		return err
 	}
 
@@ -320,10 +323,13 @@ func assignSelectedTickets(client jira.JiraClient, cfg *config.Config, allIssues
 
 	reader := bufio.NewReader(os.Stdin)
 
+	configDir := GetConfigDir()
+	configPath := config.GetConfigPath(configDir)
+	
 	for i, ticket := range selectedTickets {
 		fmt.Printf("=== [%d/%d] %s - %s ===\n", i+1, len(selectedTickets), ticket.Key, ticket.Fields.Summary)
 
-		if err := handleAssign(client, reader, cfg, ticket.Key); err != nil {
+		if err := handleAssign(client, reader, cfg, ticket.Key, configPath); err != nil {
 			fmt.Printf("Error assigning %s: %v\n", ticket.Key, err)
 			fmt.Print("Continue with next ticket? [Y/n] ")
 			response, _ := reader.ReadString('\n')

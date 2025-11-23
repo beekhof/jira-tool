@@ -196,7 +196,8 @@ func reviewTicket(client jira.JiraClient, reader *bufio.Reader, cfg *config.Conf
 
 		switch action {
 		case "a", "assign":
-			if err := handleAssign(client, reader, cfg, issue.Key); err != nil {
+			configPath := config.GetConfigPath(configDir)
+			if err := handleAssign(client, reader, cfg, issue.Key, configPath); err != nil {
 				fmt.Printf("Error assigning ticket: %v\n", err)
 			} else {
 				fmt.Println("Ticket assigned successfully.")

@@ -252,14 +252,14 @@ func runAccept(cmd *cobra.Command, args []string) error {
 
 		if len(sprints) > 0 {
 			fmt.Println("Select sprint:")
-			favorites := cfg.FavoriteSprints
-			showFavorites := len(favorites) > 0
+			recent := cfg.RecentSprints
+			showRecent := len(recent) > 0
 
-			if showFavorites {
-				for i, fav := range favorites {
-					fmt.Printf("[%d] %s\n", i+1, fav)
+			if showRecent {
+				for i, sprintName := range recent {
+					fmt.Printf("[%d] %s\n", i+1, sprintName)
 				}
-				fmt.Printf("[%d] Other...\n", len(favorites)+1)
+				fmt.Printf("[%d] Other...\n", len(recent)+1)
 			} else {
 				for i, sprint := range sprints {
 					fmt.Printf("[%d] %s\n", i+1, sprint.Name)
@@ -278,24 +278,40 @@ func runAccept(cmd *cobra.Command, args []string) error {
 			}
 
 			var sprintID int
-			if showFavorites && selected <= len(favorites) {
-				// Map favorite to actual sprint (simplified - would need better mapping)
-				if selected <= len(sprints) {
-					sprintID = sprints[selected-1].ID
+			var selectedSprintName string
+			if showRecent && selected <= len(recent) {
+				// Find sprint by name from recent list
+				sprintName := recent[selected-1]
+				for _, sprint := range sprints {
+					if sprint.Name == sprintName {
+						sprintID = sprint.ID
+						selectedSprintName = sprintName
+						break
+					}
 				}
 			} else {
 				idx := selected - 1
-				if showFavorites {
-					idx = selected - len(favorites) - 1
+				if showRecent {
+					idx = selected - len(recent) - 1
 				}
 				if idx >= 0 && idx < len(sprints) {
 					sprintID = sprints[idx].ID
+					selectedSprintName = sprints[idx].Name
 				}
 			}
 
 			if sprintID > 0 {
 				if err := client.AddIssuesToSprint(sprintID, issueKeys); err != nil {
 					return fmt.Errorf("failed to add issues to sprint: %w", err)
+				}
+				// Track this selection
+				if selectedSprintName != "" {
+					cfg.AddRecentSprint(selectedSprintName)
+					configPath := config.GetConfigPath(GetConfigDir())
+					if err := config.SaveConfig(cfg, configPath); err != nil {
+						// Log but don't fail - tracking is optional
+						_ = err
+					}
 				}
 				fmt.Printf("Added issues to sprint.\n")
 			}
@@ -325,14 +341,14 @@ func runAccept(cmd *cobra.Command, args []string) error {
 
 		if len(unreleased) > 0 {
 			fmt.Println("Select release:")
-			favorites := cfg.FavoriteReleases
-			showFavorites := len(favorites) > 0
+			recent := cfg.RecentReleases
+			showRecent := len(recent) > 0
 
-			if showFavorites {
-				for i, fav := range favorites {
-					fmt.Printf("[%d] %s\n", i+1, fav)
+			if showRecent {
+				for i, releaseName := range recent {
+					fmt.Printf("[%d] %s\n", i+1, releaseName)
 				}
-				fmt.Printf("[%d] Other...\n", len(favorites)+1)
+				fmt.Printf("[%d] Other...\n", len(recent)+1)
 			} else {
 				for i, release := range unreleased {
 					fmt.Printf("[%d] %s\n", i+1, release.Name)
@@ -351,27 +367,40 @@ func runAccept(cmd *cobra.Command, args []string) error {
 			}
 
 			var releaseID string
-			if showFavorites && selected <= len(favorites) {
-				// Find release by name
+			var selectedReleaseName string
+			if showRecent && selected <= len(recent) {
+				// Find release by name from recent list
+				releaseName := recent[selected-1]
 				for _, r := range unreleased {
-					if r.Name == favorites[selected-1] {
+					if r.Name == releaseName {
 						releaseID = r.ID
+						selectedReleaseName = releaseName
 						break
 					}
 				}
 			} else {
 				idx := selected - 1
-				if showFavorites {
-					idx = selected - len(favorites) - 1
+				if showRecent {
+					idx = selected - len(recent) - 1
 				}
 				if idx >= 0 && idx < len(unreleased) {
 					releaseID = unreleased[idx].ID
+					selectedReleaseName = unreleased[idx].Name
 				}
 			}
 
 			if releaseID != "" {
 				if err := client.AddIssuesToRelease(releaseID, issueKeys); err != nil {
 					return fmt.Errorf("failed to add issues to release: %w", err)
+				}
+				// Track this selection
+				if selectedReleaseName != "" {
+					cfg.AddRecentRelease(selectedReleaseName)
+					configPath := config.GetConfigPath(GetConfigDir())
+					if err := config.SaveConfig(cfg, configPath); err != nil {
+						// Log but don't fail - tracking is optional
+						_ = err
+					}
 				}
 				fmt.Printf("Added issues to release.\n")
 			}

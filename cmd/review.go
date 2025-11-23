@@ -254,6 +254,10 @@ func runReview(cmd *cobra.Command, args []string) error {
 // handleReviewAction shows the action menu for a ticket and handles the selected action
 // Returns (shouldContinue, success) - shouldContinue indicates if we should go back to the list
 func handleReviewAction(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, selectedIssue jira.Issue, issues []jira.Issue, issueIndex int) (bool, bool) {
+	// Get config path for saving recent selections
+	configDir := GetConfigDir()
+	configPath := config.GetConfigPath(configDir)
+	
 	// Show ticket details and action menu
 	fmt.Printf("\nSelected: %s - %s\n", selectedIssue.Key, selectedIssue.Fields.Summary)
 	fmt.Printf("Priority: %s | Assignee: %s | Status: %s\n",
@@ -276,7 +280,7 @@ func handleReviewAction(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 	success := false
 	switch action {
 	case "a", "assign":
-		if err := handleAssign(client, reader, cfg, selectedIssue.Key); err != nil {
+		if err := handleAssign(client, reader, cfg, selectedIssue.Key, configPath); err != nil {
 			fmt.Printf("Error assigning ticket: %v\n", err)
 		} else {
 			success = true
@@ -344,15 +348,15 @@ func getAssigneeName(issue jira.Issue) string {
 	return "Unassigned"
 }
 
-func handleAssign(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticketID string) error {
-	// Show favorites list
-	favorites := cfg.FavoriteAssignees
-	if len(favorites) > 0 {
-		fmt.Println("Favorite assignees:")
-		for i, fav := range favorites {
-			fmt.Printf("[%d] %s\n", i+1, fav)
+func handleAssign(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticketID string, configPath string) error {
+	// Show recent assignees list
+	recent := cfg.RecentAssignees
+	if len(recent) > 0 {
+		fmt.Println("Recent assignees:")
+		for i, userID := range recent {
+			fmt.Printf("[%d] %s\n", i+1, userID)
 		}
-		fmt.Printf("[%d] Other...\n", len(favorites)+1)
+		fmt.Printf("[%d] Other...\n", len(recent)+1)
 		fmt.Print("> ")
 
 		choice, err := reader.ReadString('\n')
@@ -365,16 +369,22 @@ func handleAssign(client jira.JiraClient, reader *bufio.Reader, cfg *config.Conf
 			return fmt.Errorf("invalid selection: %s", choice)
 		}
 
-		if selected >= 1 && selected <= len(favorites) {
-			// Parse the favorite (format: "Name (email@example.com)")
-			fav := favorites[selected-1]
-			// Extract email or name - for now, we'll search
-			users, err := client.SearchUsers(fav)
+		if selected >= 1 && selected <= len(recent) {
+			// Use the recent user identifier
+			userID := recent[selected-1]
+			// Search for the user
+			users, err := client.SearchUsers(userID)
 			if err != nil {
 				return err
 			}
 			if len(users) == 0 {
-				return fmt.Errorf("user not found: %s", fav)
+				return fmt.Errorf("user not found: %s", userID)
+			}
+			// Track this selection (move to end of recent list)
+			cfg.AddRecentAssignee(userID)
+			if err := config.SaveConfig(cfg, configPath); err != nil {
+				// Log but don't fail - tracking is optional
+				_ = err
 			}
 			return client.AssignTicket(ticketID, users[0].AccountID, users[0].Name)
 		}
@@ -419,6 +429,19 @@ func handleAssign(client jira.JiraClient, reader *bufio.Reader, cfg *config.Conf
 	}
 
 	selectedUser := users[selected-1]
+
+	// Track this selection - use Name if available, otherwise AccountID
+	userIdentifier := selectedUser.Name
+	if userIdentifier == "" {
+		userIdentifier = selectedUser.AccountID
+	}
+	if userIdentifier != "" {
+		cfg.AddRecentAssignee(userIdentifier)
+		if err := config.SaveConfig(cfg, configPath); err != nil {
+			// Log but don't fail - tracking is optional
+			_ = err
+		}
+	}
 
 	return client.AssignTicket(ticketID, selectedUser.AccountID, selectedUser.Name)
 }
