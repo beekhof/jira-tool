@@ -1,0 +1,115 @@
+# Jira Tool - Cursor Rules
+
+## Project Overview
+This is a Go CLI tool (`jira-tool`) for interacting with Jira and Gemini AI APIs. It helps manage Jira tickets with AI-assisted workflows.
+
+## Key Architectural Patterns
+
+### File Organization
+- `cmd/` - Cobra command implementations
+- `pkg/` - Reusable packages (config, jira, gemini, qa, etc.)
+- Commands self-register in their own `init()` functions
+
+### Configuration Management
+- **config.yaml** - Static configuration settings (Jira URL, project defaults, prompts, etc.)
+- **credentials.yaml** - API keys and tokens (gitignored)
+- **cache.json** - Cached API responses (gitignored)
+- **state.yaml** - Runtime state (recent selections, gitignored)
+
+### State vs Config
+- **Config** (`config.yaml`) - Settings that users explicitly configure (static)
+- **State** (`state.yaml`) - Runtime data that changes during use (dynamic)
+- Never store runtime state in config.yaml - use state.yaml instead
+
+### API Client Patterns
+- All clients accept `configDir` parameter for file paths
+- Use `GetNoCache()` from root command for cache bypass
+- Jira client handles both Cloud and Server/Data Center API differences
+- Gemini client includes retry logic with exponential backoff
+
+### Error Handling
+- Return errors, don't panic
+- Provide user-friendly error messages
+- Log but don't fail on optional operations (e.g., saving state)
+
+### Recent Selections
+- Track last 6 unique selections for assignees, sprints, releases
+- Store in `state.yaml`, not `config.yaml`
+- Automatically update when selections are made
+- Move existing items to end (most recent) if selected again
+
+## Coding Conventions
+
+### Go Style
+- Use `github.com/beekhof/jira-tool` for package imports
+- Prefer explicit error handling
+- Use `cobra` for CLI structure
+- Use `pflag` for command-line flags
+
+### Naming
+- Prefer `jira-tool` over `jira-helper` in all contexts
+- Use descriptive function and variable names
+- Commands: lowercase, hyphenated (e.g., `jira-tool`, `jira utils init`)
+
+### Command Structure
+- Top-level commands: `create`, `review`, `estimate`, `assign`, `status`, `accept`
+- Utility commands under `utils`: `init`, `refresh`, `completion`, `templates`, `models`, `debug`
+- Use `cobra.MaximumNArgs(1)` for commands that can take 0 or 1 argument
+
+### User Experience
+- Show paginated lists for multiple items (default 10 per page)
+- Support `--page-size` and `--no-paging` flags where appropriate
+- Auto-proceed if only one item found (no selection needed)
+- Show "Recent" selections before "Other..." option
+- Use interactive prompts with clear instructions
+
+## Key Design Decisions
+
+### Spike Detection
+- Spikes identified by "SPIKE" prefix in summary or key (case-insensitive)
+- Modeled as Tasks with "SPIKE: " prefix, not a separate issue type
+- Use different Gemini prompts for spikes (research) vs tasks (implementation)
+
+### Story Points
+- Field ID auto-detected during `init` and stored in config
+- Default to `customfield_10016` if not detected
+- Use letter keys (`[a]`, `[b]`, etc.) for selection, allow direct numeric input
+
+### Assignment
+- Support both Jira Cloud (`accountId`) and Server/Data Center (`key`/`name`)
+- Auto-retry with different payload format on 400 errors
+- Verify assignment after API reports success
+- Use `name` field if `accountId` is empty
+
+### Gemini Integration
+- Model configurable (default: `gemini-1.5-flash`)
+- Retry transient errors (503, 500, 502, 504, 429) with exponential backoff
+- Log retry attempts to stderr
+- Prompt templates configurable in config.yaml
+- Use placeholders: `{{context}}`, `{{history}}`
+
+### Jira API Compatibility
+- Try `/rest/api/3/user/search` first, fallback to `/rest/api/2/user/search`
+- Handle HTML responses (endpoint issues) gracefully
+- Support both Cloud and Server/Data Center user identification formats
+
+## When Making Changes
+
+1. **Always check existing patterns** - Look for similar code before adding new features
+2. **Update state.yaml, not config.yaml** - For runtime data
+3. **Handle missing files gracefully** - State/cache files may not exist yet
+4. **Test with `--no-cache`** - When debugging API issues
+5. **Preserve existing config** - `init` should not overwrite existing values
+6. **Use `GetConfigDir()` and `GetNoCache()`** - From root command for consistency
+7. **Follow pagination patterns** - Use existing pagination code as reference
+8. **Update README.md** - Document new features and configuration options
+
+## Common Pitfalls to Avoid
+
+- Don't store runtime state in config.yaml
+- Don't hardcode field IDs (use config)
+- Don't assume Jira Cloud format (handle Server/Data Center)
+- Don't require user input when only one option exists
+- Don't forget to save state after updating recent selections
+- Don't use `go-keyring` (use file-based credentials)
+
