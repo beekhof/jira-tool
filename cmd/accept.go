@@ -251,8 +251,16 @@ func runAccept(cmd *cobra.Command, args []string) error {
 		}
 
 		if len(sprints) > 0 {
+			// Load state for recent selections
+			statePath := config.GetStatePath(configDir)
+			state, err := config.LoadState(statePath)
+			if err != nil {
+				// If state can't be loaded, continue without recent list
+				state = &config.State{}
+			}
+
 			fmt.Println("Select sprint:")
-			recent := cfg.RecentSprints
+			recent := state.RecentSprints
 			showRecent := len(recent) > 0
 
 			if showRecent {
@@ -306,9 +314,8 @@ func runAccept(cmd *cobra.Command, args []string) error {
 				}
 				// Track this selection
 				if selectedSprintName != "" {
-					cfg.AddRecentSprint(selectedSprintName)
-					configPath := config.GetConfigPath(GetConfigDir())
-					if err := config.SaveConfig(cfg, configPath); err != nil {
+					state.AddRecentSprint(selectedSprintName)
+					if err := config.SaveState(state, statePath); err != nil {
 						// Log but don't fail - tracking is optional
 						_ = err
 					}
@@ -340,8 +347,16 @@ func runAccept(cmd *cobra.Command, args []string) error {
 		}
 
 		if len(unreleased) > 0 {
+			// Load state for recent selections
+			statePath := config.GetStatePath(configDir)
+			state, err := config.LoadState(statePath)
+			if err != nil {
+				// If state can't be loaded, continue without recent list
+				state = &config.State{}
+			}
+
 			fmt.Println("Select release:")
-			recent := cfg.RecentReleases
+			recent := state.RecentReleases
 			showRecent := len(recent) > 0
 
 			if showRecent {
@@ -395,9 +410,8 @@ func runAccept(cmd *cobra.Command, args []string) error {
 				}
 				// Track this selection
 				if selectedReleaseName != "" {
-					cfg.AddRecentRelease(selectedReleaseName)
-					configPath := config.GetConfigPath(GetConfigDir())
-					if err := config.SaveConfig(cfg, configPath); err != nil {
+					state.AddRecentRelease(selectedReleaseName)
+					if err := config.SaveState(state, statePath); err != nil {
 						// Log but don't fail - tracking is optional
 						_ = err
 					}

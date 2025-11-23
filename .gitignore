@@ -36,6 +36,7 @@ go.work
 config.yaml
 credentials.yaml
 cache.json
+state.yaml
 .jira-tool/
 
 # Environment files

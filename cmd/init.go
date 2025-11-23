@@ -170,9 +170,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		if len(cfg.StoryPointOptions) == 0 {
 			cfg.StoryPointOptions = existingCfg.StoryPointOptions
 		}
-		cfg.RecentAssignees = existingCfg.RecentAssignees
-		cfg.RecentSprints = existingCfg.RecentSprints
-		cfg.RecentReleases = existingCfg.RecentReleases
+		// Recent selections are stored in state.yaml, not config.yaml
 		cfg.QuestionPromptTemplate = existingCfg.QuestionPromptTemplate
 		cfg.DescriptionPromptTemplate = existingCfg.DescriptionPromptTemplate
 		cfg.SpikeQuestionPromptTemplate = existingCfg.SpikeQuestionPromptTemplate

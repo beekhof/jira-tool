@@ -75,7 +75,7 @@ func runAssign(cmd *cobra.Command, args []string) error {
 func assignSingleTicket(client jira.JiraClient, cfg *config.Config, ticketID string) error {
 	configDir := GetConfigDir()
 	configPath := config.GetConfigPath(configDir)
-	
+
 	// Fetch ticket details
 	fmt.Printf("Fetching ticket details for %s...\n", ticketID)
 	issues, err := client.SearchTickets(fmt.Sprintf("key = %s", ticketID))
@@ -115,7 +115,7 @@ func assignMultipleTickets(client jira.JiraClient, cfg *config.Config, allFlag b
 
 	// Build JQL query
 	jql := fmt.Sprintf("project = %s AND assignee is EMPTY", project)
-	
+
 	// Add state filter
 	if !allFlag {
 		if stateFlag != "" {
@@ -126,7 +126,7 @@ func assignMultipleTickets(client jira.JiraClient, cfg *config.Config, allFlag b
 			jql = fmt.Sprintf("%s AND status = \"Backlog\"", jql)
 		}
 	}
-	
+
 	jql = fmt.Sprintf("%s ORDER BY updated DESC", jql)
 	allIssues, err := client.SearchTickets(jql)
 	if err != nil {
@@ -325,7 +325,7 @@ func assignSelectedTickets(client jira.JiraClient, cfg *config.Config, allIssues
 
 	configDir := GetConfigDir()
 	configPath := config.GetConfigPath(configDir)
-	
+
 	for i, ticket := range selectedTickets {
 		fmt.Printf("=== [%d/%d] %s - %s ===\n", i+1, len(selectedTickets), ticket.Key, ticket.Fields.Summary)
 
@@ -378,7 +378,7 @@ func unassignMultipleTickets(client jira.JiraClient, cfg *config.Config, allFlag
 
 	// Build JQL query
 	jql := fmt.Sprintf("project = %s AND assignee is NOT EMPTY", project)
-	
+
 	// Add state filter
 	if !allFlag {
 		if stateFlag != "" {
@@ -389,7 +389,7 @@ func unassignMultipleTickets(client jira.JiraClient, cfg *config.Config, allFlag
 			jql = fmt.Sprintf("%s AND status = \"Backlog\"", jql)
 		}
 	}
-	
+
 	jql = fmt.Sprintf("%s ORDER BY updated DESC", jql)
 	allIssues, err := client.SearchTickets(jql)
 	if err != nil {
@@ -605,4 +605,3 @@ func init() {
 	assignCmd.Flags().StringVar(&stateFlag, "state", "", "Filter by specific state (e.g., \"To Do\", \"In Progress\")")
 	rootCmd.AddCommand(assignCmd)
 }
-

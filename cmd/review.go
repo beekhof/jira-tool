@@ -257,7 +257,7 @@ func handleReviewAction(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 	// Get config path for saving recent selections
 	configDir := GetConfigDir()
 	configPath := config.GetConfigPath(configDir)
-	
+
 	// Show ticket details and action menu
 	fmt.Printf("\nSelected: %s - %s\n", selectedIssue.Key, selectedIssue.Fields.Summary)
 	fmt.Printf("Priority: %s | Assignee: %s | Status: %s\n",
@@ -349,8 +349,17 @@ func getAssigneeName(issue jira.Issue) string {
 }
 
 func handleAssign(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticketID string, configPath string) error {
+	// Load state for recent selections
+	configDir := GetConfigDir()
+	statePath := config.GetStatePath(configDir)
+	state, err := config.LoadState(statePath)
+	if err != nil {
+		// If state can't be loaded, continue without recent list
+		state = &config.State{}
+	}
+
 	// Show recent assignees list
-	recent := cfg.RecentAssignees
+	recent := state.RecentAssignees
 	if len(recent) > 0 {
 		fmt.Println("Recent assignees:")
 		for i, userID := range recent {
@@ -381,8 +390,8 @@ func handleAssign(client jira.JiraClient, reader *bufio.Reader, cfg *config.Conf
 				return fmt.Errorf("user not found: %s", userID)
 			}
 			// Track this selection (move to end of recent list)
-			cfg.AddRecentAssignee(userID)
-			if err := config.SaveConfig(cfg, configPath); err != nil {
+			state.AddRecentAssignee(userID)
+			if err := config.SaveState(state, statePath); err != nil {
 				// Log but don't fail - tracking is optional
 				_ = err
 			}
@@ -436,8 +445,8 @@ func handleAssign(client jira.JiraClient, reader *bufio.Reader, cfg *config.Conf
 		userIdentifier = selectedUser.AccountID
 	}
 	if userIdentifier != "" {
-		cfg.AddRecentAssignee(userIdentifier)
-		if err := config.SaveConfig(cfg, configPath); err != nil {
+		state.AddRecentAssignee(userIdentifier)
+		if err := config.SaveState(state, statePath); err != nil {
 			// Log but don't fail - tracking is optional
 			_ = err
 		}
