@@ -22,6 +22,10 @@ type Config struct {
 	ReviewPageSize         int      `yaml:"review_page_size,omitempty"`
 	StoryPointOptions      []int    `yaml:"story_point_options,omitempty"`
 	StoryPointsFieldID     string   `yaml:"story_points_field_id,omitempty"`
+	DescriptionMinLength   int      `yaml:"description_min_length,omitempty"`   // Minimum description length (default: 128)
+	DescriptionQualityAI   bool     `yaml:"description_quality_ai,omitempty"`   // Enable Gemini AI analysis for description quality (default: false)
+	SeverityFieldID        string   `yaml:"severity_field_id,omitempty"`         // Custom field ID for severity (optional)
+	DefaultBoardID         int      `yaml:"default_board_id,omitempty"`         // Default board ID if auto-detection fails (default: 0)
 }
 
 // GetConfigPath returns the path for the config file

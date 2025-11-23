@@ -88,3 +88,75 @@ func TestGetConfigPath(t *testing.T) {
 		t.Errorf("Expected config path %s, got %s", expected, customPath)
 	}
 }
+
+func TestNewConfigFields(t *testing.T) {
+	t.Run("Load config with new fields missing (should use defaults)", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "config.yaml")
+
+		// Save config without new fields
+		cfg := &Config{
+			JiraURL:        "https://test.atlassian.net",
+			DefaultProject: "TEST",
+		}
+
+		if err := SaveConfig(cfg, configPath); err != nil {
+			t.Fatalf("Failed to save config: %v", err)
+		}
+
+		loaded, err := LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("Failed to load config: %v", err)
+		}
+
+		// Verify new fields have defaults
+		if loaded.DescriptionMinLength != 0 {
+			t.Errorf("Expected DescriptionMinLength 0 (default), got %d", loaded.DescriptionMinLength)
+		}
+		if loaded.DescriptionQualityAI != false {
+			t.Errorf("Expected DescriptionQualityAI false (default), got %v", loaded.DescriptionQualityAI)
+		}
+		if loaded.SeverityFieldID != "" {
+			t.Errorf("Expected SeverityFieldID '' (default), got '%s'", loaded.SeverityFieldID)
+		}
+		if loaded.DefaultBoardID != 0 {
+			t.Errorf("Expected DefaultBoardID 0 (default), got %d", loaded.DefaultBoardID)
+		}
+	})
+
+	t.Run("Load config with new fields set", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "config.yaml")
+
+		cfg := &Config{
+			JiraURL:              "https://test.atlassian.net",
+			DefaultProject:       "TEST",
+			DescriptionMinLength: 256,
+			DescriptionQualityAI: true,
+			SeverityFieldID:      "customfield_12345",
+			DefaultBoardID:       5,
+		}
+
+		if err := SaveConfig(cfg, configPath); err != nil {
+			t.Fatalf("Failed to save config: %v", err)
+		}
+
+		loaded, err := LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("Failed to load config: %v", err)
+		}
+
+		if loaded.DescriptionMinLength != 256 {
+			t.Errorf("Expected DescriptionMinLength 256, got %d", loaded.DescriptionMinLength)
+		}
+		if loaded.DescriptionQualityAI != true {
+			t.Errorf("Expected DescriptionQualityAI true, got %v", loaded.DescriptionQualityAI)
+		}
+		if loaded.SeverityFieldID != "customfield_12345" {
+			t.Errorf("Expected SeverityFieldID 'customfield_12345', got '%s'", loaded.SeverityFieldID)
+		}
+		if loaded.DefaultBoardID != 5 {
+			t.Errorf("Expected DefaultBoardID 5, got %d", loaded.DefaultBoardID)
+		}
+	})
+}
