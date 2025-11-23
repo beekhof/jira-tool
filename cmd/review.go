@@ -127,7 +127,7 @@ func runReview(cmd *cobra.Command, args []string) error {
 			pageSize = 10
 		}
 	}
-	
+
 	// If no-paging flag is set, set page size to total number of issues
 	if noPagingFlag {
 		pageSize = len(issues)
