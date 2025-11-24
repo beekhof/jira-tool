@@ -7,11 +7,13 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"syscall"
 
 	"github.com/beekhof/jira-tool/pkg/config"
 	"github.com/beekhof/jira-tool/pkg/credentials"
+	"github.com/beekhof/jira-tool/pkg/jira"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
