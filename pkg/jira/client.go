@@ -152,6 +152,10 @@ type Issue struct {
 			Name         string `json:"name"`   // Some instances use "name"
 			Active       bool   `json:"active"` // User active status
 		} `json:"assignee"`
+		Components []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"components"`
 		StoryPoints float64 `json:"customfield_10016"`
 	} `json:"fields"`
 }
