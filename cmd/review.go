@@ -510,7 +510,9 @@ func handleDetail(client jira.JiraClient, reader *bufio.Reader, ticketID, summar
 	}
 
 	// Run Q&A flow (pass summary to detect spike based on SPIKE prefix)
-	description, err := qa.RunQnAFlow(geminiClient, summary, cfg.MaxQuestions, ticketSummary)
+		// Get existing description if available
+		existingDesc, _ := client.GetTicketDescription(ticketKey)
+		description, err := qa.RunQnAFlow(geminiClient, summary, cfg.MaxQuestions, ticketSummary, existingDesc)
 	if err != nil {
 		return err
 	}
