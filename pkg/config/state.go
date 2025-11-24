@@ -13,6 +13,7 @@ type State struct {
 	RecentAssignees []string `yaml:"recent_assignees,omitempty"` // Last 6 unique users selected
 	RecentSprints   []string `yaml:"recent_sprints,omitempty"`   // Last 6 unique sprints selected
 	RecentReleases  []string `yaml:"recent_releases,omitempty"`  // Last 6 unique releases selected
+	RecentComponents []string `yaml:"recent_components,omitempty"` // Last 6 unique components selected
 }
 
 // GetStatePath returns the path for the state file
@@ -81,6 +82,11 @@ func (s *State) AddRecentSprint(sprintName string) {
 // AddRecentRelease adds a release to the recent releases list (max 6 unique)
 func (s *State) AddRecentRelease(releaseName string) {
 	s.RecentReleases = addToRecentList(s.RecentReleases, releaseName, 6)
+}
+
+// AddRecentComponent adds a component to the recent components list (max 6 unique)
+func (s *State) AddRecentComponent(componentName string) {
+	s.RecentComponents = addToRecentList(s.RecentComponents, componentName, 6)
 }
 
 // addToRecentList adds an item to a recent list, keeping only the last N unique items
