@@ -41,6 +41,8 @@ type JiraClient interface {
 	GetTicketRaw(ticketID string) (map[string]interface{}, error)
 	GetComponents(projectKey string) ([]Component, error)
 	UpdateTicketComponents(ticketID string, componentIDs []string) error
+	DetectSeverityField(projectKey string) (string, error)
+	GetSeverityFieldValues(fieldID string) ([]string, error)
 }
 
 // Attachment represents a Jira attachment
