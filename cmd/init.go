@@ -176,6 +176,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 		cfg.SpikeQuestionPromptTemplate = existingCfg.SpikeQuestionPromptTemplate
 		cfg.SpikePromptTemplate = existingCfg.SpikePromptTemplate
 		cfg.ReviewPageSize = existingCfg.ReviewPageSize
+		cfg.DescriptionMinLength = existingCfg.DescriptionMinLength
+		cfg.DescriptionQualityAI = existingCfg.DescriptionQualityAI
+		cfg.SeverityFieldID = existingCfg.SeverityFieldID
+		cfg.DefaultBoardID = existingCfg.DefaultBoardID
 	}
 
 	// Set defaults if no existing config
@@ -187,6 +191,95 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	if len(cfg.StoryPointOptions) == 0 {
 		cfg.StoryPointOptions = []int{1, 2, 3, 5, 8, 13}
+	}
+	if cfg.DescriptionMinLength == 0 {
+		cfg.DescriptionMinLength = 128
+	}
+
+	// Prompt for description quality settings
+	fmt.Print("\nDescription minimum length (characters) [default: 128]: ")
+	descLenInput, err := reader.ReadString('\n')
+	if err == nil {
+		descLenInput = strings.TrimSpace(descLenInput)
+		if descLenInput != "" {
+			if descLen, err := strconv.Atoi(descLenInput); err == nil && descLen > 0 {
+				cfg.DescriptionMinLength = descLen
+			} else if existingCfg != nil && existingCfg.DescriptionMinLength > 0 {
+				cfg.DescriptionMinLength = existingCfg.DescriptionMinLength
+			}
+		} else if existingCfg != nil && existingCfg.DescriptionMinLength > 0 {
+			cfg.DescriptionMinLength = existingCfg.DescriptionMinLength
+		}
+	}
+
+	fmt.Print("Enable AI description quality check? [y/N]: ")
+	aiCheckInput, err := reader.ReadString('\n')
+	if err == nil {
+		aiCheckInput = strings.TrimSpace(strings.ToLower(aiCheckInput))
+		if aiCheckInput == "y" || aiCheckInput == "yes" {
+			cfg.DescriptionQualityAI = true
+		} else if existingCfg != nil {
+			cfg.DescriptionQualityAI = existingCfg.DescriptionQualityAI
+		}
+	} else if existingCfg != nil {
+		cfg.DescriptionQualityAI = existingCfg.DescriptionQualityAI
+	}
+
+	// Prompt for severity field ID
+	fmt.Print("\nSeverity field ID [auto-detect/enter manually/skip]: ")
+	severityInput, err := reader.ReadString('\n')
+	if err == nil {
+		severityInput = strings.TrimSpace(severityInput)
+		if severityInput == "" || strings.ToLower(severityInput) == "skip" {
+			if existingCfg != nil && existingCfg.SeverityFieldID != "" {
+				cfg.SeverityFieldID = existingCfg.SeverityFieldID
+			}
+		} else if strings.ToLower(severityInput) == "auto-detect" || strings.ToLower(severityInput) == "auto" {
+			// Try to auto-detect severity field
+			fmt.Println("Detecting severity field ID...")
+			jiraClient, err := jira.NewClient(configDir, false)
+			if err == nil {
+				detectedID, err := jiraClient.DetectSeverityField(defaultProject)
+				if err == nil && detectedID != "" {
+					cfg.SeverityFieldID = detectedID
+					fmt.Printf("Detected severity field ID: %s\n", detectedID)
+				} else {
+					fmt.Printf("Warning: Could not detect severity field ID: %v\n", err)
+					if existingCfg != nil && existingCfg.SeverityFieldID != "" {
+						cfg.SeverityFieldID = existingCfg.SeverityFieldID
+						fmt.Printf("Keeping existing value: %s\n", cfg.SeverityFieldID)
+					}
+				}
+			} else {
+				fmt.Printf("Warning: Could not create Jira client for auto-detection: %v\n", err)
+				if existingCfg != nil && existingCfg.SeverityFieldID != "" {
+					cfg.SeverityFieldID = existingCfg.SeverityFieldID
+				}
+			}
+		} else {
+			// Manual entry
+			cfg.SeverityFieldID = severityInput
+		}
+	} else if existingCfg != nil {
+		cfg.SeverityFieldID = existingCfg.SeverityFieldID
+	}
+
+	// Prompt for default board ID
+	fmt.Print("\nDefault board ID (optional, press Enter to skip): ")
+	boardIDInput, err := reader.ReadString('\n')
+	if err == nil {
+		boardIDInput = strings.TrimSpace(boardIDInput)
+		if boardIDInput != "" {
+			if boardID, err := strconv.Atoi(boardIDInput); err == nil && boardID > 0 {
+				cfg.DefaultBoardID = boardID
+			} else if existingCfg != nil && existingCfg.DefaultBoardID > 0 {
+				cfg.DefaultBoardID = existingCfg.DefaultBoardID
+			}
+		} else if existingCfg != nil && existingCfg.DefaultBoardID > 0 {
+			cfg.DefaultBoardID = existingCfg.DefaultBoardID
+		}
+	} else if existingCfg != nil {
+		cfg.DefaultBoardID = existingCfg.DefaultBoardID
 	}
 
 	if err := config.SaveConfig(cfg, configPath); err != nil {
