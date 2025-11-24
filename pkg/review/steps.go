@@ -364,3 +364,47 @@ func HandleBacklogTransitionStep(client jira.JiraClient, ticket jira.Issue) (boo
 	return true, nil
 }
 
+// SelectBoard selects a board for a project - auto-selects if one board, prompts if multiple
+func SelectBoard(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, projectKey string) (int, error) {
+	boards, err := client.GetBoardsForProject(projectKey)
+	if err != nil {
+		return 0, fmt.Errorf("failed to fetch boards: %w", err)
+	}
+
+	if len(boards) == 0 {
+		// No boards found - use default if configured
+		if cfg.DefaultBoardID > 0 {
+			return cfg.DefaultBoardID, nil
+		}
+		return 0, fmt.Errorf("no boards found for project %s. Please configure default_board_id in config", projectKey)
+	}
+
+	if len(boards) == 1 {
+		// Auto-select if only one board
+		return boards[0].ID, nil
+	}
+
+	// Multiple boards - prompt user
+	fmt.Println("Select board:")
+	for i, board := range boards {
+		fmt.Printf("[%d] %s (%s)\n", i+1, board.Name, board.Type)
+	}
+	fmt.Print("> ")
+
+	choice, err := reader.ReadString('\n')
+	if err != nil {
+		return 0, err
+	}
+	choice = strings.TrimSpace(choice)
+	selected, err := strconv.Atoi(choice)
+	if err != nil {
+		return 0, fmt.Errorf("invalid selection: %s", choice)
+	}
+
+	if selected < 1 || selected > len(boards) {
+		return 0, fmt.Errorf("invalid selection: %d", selected)
+	}
+
+	return boards[selected-1].ID, nil
+}
+
