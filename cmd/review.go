@@ -12,6 +12,7 @@ import (
 	"github.com/beekhof/jira-tool/pkg/gemini"
 	"github.com/beekhof/jira-tool/pkg/jira"
 	"github.com/beekhof/jira-tool/pkg/qa"
+	"github.com/beekhof/jira-tool/pkg/review"
 
 	"github.com/spf13/cobra"
 )

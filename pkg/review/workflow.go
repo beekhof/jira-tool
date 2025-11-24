@@ -273,6 +273,11 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 		{
 			step: StepStoryPoints,
 			handler: func() (bool, error) {
+				if geminiClient == nil {
+					// Skip AI estimation if Gemini not available
+					fmt.Println("Gemini client not available - skipping story points estimation")
+					return false, nil // Skip this step
+				}
 				return HandleStoryPointsStep(client, geminiClient, reader, cfg, ticket)
 			},
 			required: true,
