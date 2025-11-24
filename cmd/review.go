@@ -102,22 +102,24 @@ func runReview(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// If only one ticket, automatically show action menu in a loop
+	// If only one ticket, automatically run guided workflow
 	if len(issues) == 1 {
 		selectedIssue := issues[0]
 		reader := bufio.NewReader(os.Stdin)
-		for {
-			shouldContinue, _ := handleReviewAction(client, reader, cfg, selectedIssue, issues, 0)
-			if !shouldContinue {
-				return nil
-			}
-			// Refresh ticket data
-			updated, err := client.SearchTickets(fmt.Sprintf("key = %s", selectedIssue.Key))
-			if err == nil && len(updated) > 0 {
-				selectedIssue = updated[0]
-				issues[0] = updated[0]
-			}
+		configDir := GetConfigDir()
+
+		// Initialize Gemini client
+		geminiClient, err := gemini.NewClient(configDir)
+		if err != nil {
+			fmt.Printf("Warning: Could not initialize Gemini client: %v\n", err)
+			fmt.Println("Continuing without AI features...")
+			geminiClient = nil
 		}
+
+		if err := review.ProcessTicketWorkflow(client, geminiClient, reader, cfg, selectedIssue, configDir); err != nil {
+			return fmt.Errorf("workflow error: %w", err)
+		}
+		return nil
 	}
 
 	// Determine page size: command flag > config > default
@@ -240,12 +242,19 @@ func runReview(cmd *cobra.Command, args []string) error {
 		// Get the selected ticket
 		selectedIssue := issues[ticketNum-1]
 
-		_, success := handleReviewAction(client, reader, cfg, selectedIssue, issues, ticketNum-1)
-		// For multiple tickets, we always go back to the list (outer loop continues)
-		// shouldContinue is only meaningful for single ticket case
+		// Run guided workflow
+		configDir := GetConfigDir()
+		geminiClient, err := gemini.NewClient(configDir)
+		if err != nil {
+			fmt.Printf("Warning: Could not initialize Gemini client: %v\n", err)
+			fmt.Println("Continuing without AI features...")
+			geminiClient = nil
+		}
 
-		// Mark as acted on if successful
-		if success {
+		if err := review.ProcessTicketWorkflow(client, geminiClient, reader, cfg, selectedIssue, configDir); err != nil {
+			fmt.Printf("Error in workflow: %v\n", err)
+		} else {
+			// Mark as acted on
 			actedOn[selectedIssue.Key] = true
 		}
 		// Continue outer loop to show list again

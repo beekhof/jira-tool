@@ -9,15 +9,16 @@ import (
 	"github.com/beekhof/jira-tool/pkg/config"
 	"github.com/beekhof/jira-tool/pkg/gemini"
 	"github.com/beekhof/jira-tool/pkg/jira"
-	"github.com/beekhof/jira-tool/pkg/qa"
 )
 
 // CheckDescriptionQuality checks if a ticket's description meets quality criteria
-func CheckDescriptionQuality(ticket jira.Issue, cfg *config.Config, geminiClient gemini.GeminiClient) (bool, string, error) {
-	description := ""
-	// Try to get description from ticket fields (may need to fetch full ticket)
-	// For now, we'll check length from what we have
-	// In practice, we may need to call GetTicketDescription for full text
+func CheckDescriptionQuality(client jira.JiraClient, ticket jira.Issue, cfg *config.Config) (bool, string, error) {
+	// Fetch description
+	description, err := client.GetTicketDescription(ticket.Key)
+	if err != nil {
+		// If we can't get description, assume it's missing
+		description = ""
+	}
 
 	// Check minimum length
 	if cfg.DescriptionMinLength > 0 {
@@ -26,20 +27,12 @@ func CheckDescriptionQuality(ticket jira.Issue, cfg *config.Config, geminiClient
 		}
 	}
 
-	// Optional Gemini AI analysis
+	// Optional Gemini AI analysis (not implemented yet - would require new method)
+	// For now, just check length
 	if cfg.DescriptionQualityAI {
-		// Fetch full description
-		fullDesc, err := geminiClient.(interface {
-			GetTicketDescription(string) (string, error)
-		}).GetTicketDescription(ticket.Key)
-		if err == nil && fullDesc != "" {
-			description = fullDesc
-		}
-
-		// Use Gemini to analyze if description answers "what", "why", "how"
-		prompt := fmt.Sprintf("Does this Jira ticket description answer what needs to be done, why it's needed, and how it will be accomplished? Description: %s", description)
-		// For now, skip actual Gemini call - would need to add analysis method
-		// This is a placeholder for the AI analysis
+		// Placeholder for future AI analysis
+		// Would use Gemini to check if description answers "what", "why", "how"
+		_ = description // Use description variable
 	}
 
 	return true, "", nil
