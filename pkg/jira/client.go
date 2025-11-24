@@ -43,6 +43,7 @@ type JiraClient interface {
 	UpdateTicketComponents(ticketID string, componentIDs []string) error
 	DetectSeverityField(projectKey string) (string, error)
 	GetSeverityFieldValues(fieldID string) ([]string, error)
+	GetBoardsForProject(projectKey string) ([]Board, error)
 }
 
 // Attachment represents a Jira attachment
@@ -93,6 +94,13 @@ type Component struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+}
+
+// Board represents a Jira board
+type Board struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	Type string `json:"type"`
 }
 
 // Sprint represents a Jira sprint
