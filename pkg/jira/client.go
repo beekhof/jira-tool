@@ -39,6 +39,8 @@ type JiraClient interface {
 	GetIssuesForSprint(sprintID int) ([]Issue, error)
 	GetIssuesForRelease(releaseID string) ([]Issue, error)
 	GetTicketRaw(ticketID string) (map[string]interface{}, error)
+	GetComponents(projectKey string) ([]Component, error)
+	UpdateTicketComponents(ticketID string, componentIDs []string) error
 }
 
 // Attachment represents a Jira attachment
@@ -82,6 +84,13 @@ type User struct {
 type Priority struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+}
+
+// Component represents a Jira component
+type Component struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 // Sprint represents a Jira sprint

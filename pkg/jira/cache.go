@@ -14,6 +14,7 @@ type Cache struct {
 	Sprints    []SprintParsed    `json:"sprints,omitempty"`
 	Releases   []ReleaseParsed   `json:"releases,omitempty"`
 	Users      map[string][]User `json:"users,omitempty"` // keyed by search query
+	Components map[string][]Component `json:"components,omitempty"` // keyed by project key
 	mu         sync.RWMutex
 	path       string
 }
@@ -34,8 +35,9 @@ func GetCachePath(configDir string) string {
 // NewCache creates a new cache instance
 func NewCache(path string) *Cache {
 	return &Cache{
-		Users: make(map[string][]User),
-		path:  path,
+		Users:      make(map[string][]User),
+		Components: make(map[string][]Component),
+		path:       path,
 	}
 }
 
@@ -60,6 +62,11 @@ func (c *Cache) Load() error {
 	// Initialize Users map if it's nil
 	if c.Users == nil {
 		c.Users = make(map[string][]User)
+	}
+
+	// Initialize Components map if it's nil
+	if c.Components == nil {
+		c.Components = make(map[string][]Component)
 	}
 
 	return nil
@@ -97,6 +104,7 @@ func (c *Cache) Clear() error {
 	c.Sprints = nil
 	c.Releases = nil
 	c.Users = make(map[string][]User)
+	c.Components = make(map[string][]Component)
 
 	// Delete the cache file
 	if err := os.Remove(c.path); err != nil && !os.IsNotExist(err) {
