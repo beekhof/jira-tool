@@ -1512,6 +1512,143 @@ func (c *jiraClient) GetPriorities() ([]Priority, error) {
 	return priorities, nil
 }
 
+// GetComponents retrieves all components for a project
+func (c *jiraClient) GetComponents(projectKey string) ([]Component, error) {
+	// Check cache first (unless --no-cache is set)
+	if !c.noCache {
+		c.cache.mu.RLock()
+		if components, ok := c.cache.Components[projectKey]; ok && len(components) > 0 {
+			result := make([]Component, len(components))
+			copy(result, components)
+			c.cache.mu.RUnlock()
+			return result, nil
+		}
+		c.cache.mu.RUnlock()
+	}
+
+	endpoint := fmt.Sprintf("%s/rest/api/2/project/%s/components", c.baseURL, projectKey)
+
+	req, err := http.NewRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/json")
+	c.setAuth(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			return nil, fmt.Errorf("authentication failed. Your Jira token may be invalid. Please run 'jira init'")
+		}
+		if resp.StatusCode == 404 {
+			return nil, fmt.Errorf("project %s not found", projectKey)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var components []Component
+	if err := json.Unmarshal(body, &components); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Save to cache (unless --no-cache is set)
+	if !c.noCache {
+		c.cache.mu.Lock()
+		c.cache.Components[projectKey] = components
+		c.cache.mu.Unlock()
+		if err := c.cache.Save(); err != nil {
+			// Log but don't fail - caching is optional
+			_ = err
+		}
+	}
+
+	return components, nil
+}
+
+// UpdateTicketComponents updates the components for a ticket
+func (c *jiraClient) UpdateTicketComponents(ticketID string, componentIDs []string) error {
+	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s", c.baseURL, ticketID)
+
+	// Construct component objects
+	components := make([]map[string]interface{}, len(componentIDs))
+	for i, id := range componentIDs {
+		components[i] = map[string]interface{}{
+			"id": id,
+		}
+	}
+
+	// Construct the JSON payload
+	payload := map[string]interface{}{
+		"fields": map[string]interface{}{
+			"components": components,
+		},
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("PUT", endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	c.setAuth(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			return fmt.Errorf("authentication failed. Your Jira token may be invalid. Please run 'jira init'")
+		}
+		if resp.StatusCode == 404 {
+			return fmt.Errorf("ticket %s not found", ticketID)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		bodyStr := string(body)
+		if resp.StatusCode == 400 {
+			// Try to parse error message from response
+			var apiError struct {
+				ErrorMessages []string          `json:"errorMessages"`
+				Errors        map[string]string `json:"errors"`
+			}
+			if err := json.Unmarshal(body, &apiError); err == nil {
+				if len(apiError.ErrorMessages) > 0 {
+					return fmt.Errorf("Jira API error: %s", strings.Join(apiError.ErrorMessages, "; "))
+				}
+				if len(apiError.Errors) > 0 {
+					var errorMsgs []string
+					for k, v := range apiError.Errors {
+						errorMsgs = append(errorMsgs, fmt.Sprintf("%s: %s", k, v))
+					}
+					return fmt.Errorf("Jira API error: %s", strings.Join(errorMsgs, "; "))
+				}
+			}
+		}
+		return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
+	}
+
+	return nil
+}
+
 // UpdateTicketPriority updates the priority of a ticket
 func (c *jiraClient) UpdateTicketPriority(ticketID, priorityID string) error {
 	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s", c.baseURL, ticketID)
