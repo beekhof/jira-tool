@@ -167,7 +167,8 @@ func runAccept(cmd *cobra.Command, args []string) error {
 	if ticketSummary != "" {
 		spikeIdentifier = ticketSummary
 	}
-	plan, err := qa.RunQnAFlow(geminiClient, context, cfg.MaxQuestions, spikeIdentifier)
+	// No existing description for epic plan generation
+	plan, err := qa.RunQnAFlow(geminiClient, context, cfg.MaxQuestions, spikeIdentifier, "")
 	if err != nil {
 		return err
 	}

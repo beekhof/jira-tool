@@ -12,9 +12,16 @@ import (
 // It asks up to maxQuestions questions and then generates a final description
 // If maxQuestions is 0 or negative, defaults to 4
 // summaryOrKey is used to detect spikes (tickets with "SPIKE" prefix) and select the appropriate prompt template
-func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions int, summaryOrKey string) (string, error) {
+// existingDescription is included in the context if provided (for improving existing descriptions)
+func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions int, summaryOrKey string, existingDescription string) (string, error) {
 	history := []string{}
 	reader := bufio.NewReader(os.Stdin)
+
+	// Include existing description in context if provided
+	enhancedContext := initialContext
+	if existingDescription != "" {
+		enhancedContext = fmt.Sprintf("%s\n\nExisting description: %s\n\nImprove or expand this description based on the following questions:", initialContext, existingDescription)
+	}
 
 	// Default to 4 if not specified
 	if maxQuestions <= 0 {
@@ -24,7 +31,7 @@ func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions 
 	// Loop up to maxQuestions times
 	for i := 0; i < maxQuestions; i++ {
 		// Generate a question
-		question, err := client.GenerateQuestion(history, initialContext, summaryOrKey)
+		question, err := client.GenerateQuestion(history, enhancedContext, summaryOrKey)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate question: %w", err)
 		}
@@ -53,7 +60,7 @@ func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions 
 	}
 
 	// Generate the final description
-	description, err := client.GenerateDescription(history, initialContext, summaryOrKey)
+	description, err := client.GenerateDescription(history, enhancedContext, summaryOrKey)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate description: %w", err)
 	}
