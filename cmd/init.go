@@ -153,12 +153,48 @@ func runInit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Try to detect Epic Link field ID if we have a token and URL
+	var epicLinkFieldID string
+	if jiraToken != "" && jiraURL != "" {
+		fmt.Println("\nDetecting Epic Link field ID...")
+		// Create temporary client for detection
+		tempClient, err := jira.NewClient(configDir, true) // noCache for detection
+		if err == nil && defaultProject != "" {
+			detectedID, err := tempClient.DetectEpicLinkField(defaultProject)
+			if err != nil {
+				fmt.Printf("Warning: Could not detect Epic Link field ID: %v\n", err)
+				if existingCfg != nil && existingCfg.EpicLinkFieldID != "" {
+					epicLinkFieldID = existingCfg.EpicLinkFieldID
+					fmt.Printf("Keeping existing value: %s\n", epicLinkFieldID)
+				}
+			} else if detectedID != "" {
+				epicLinkFieldID = detectedID
+				fmt.Printf("Detected Epic Link field ID: %s\n", epicLinkFieldID)
+			} else {
+				if existingCfg != nil && existingCfg.EpicLinkFieldID != "" {
+					epicLinkFieldID = existingCfg.EpicLinkFieldID
+					fmt.Printf("Epic Link field not detected, keeping existing value: %s\n", epicLinkFieldID)
+				} else {
+					fmt.Println("Epic Link field not detected (optional)")
+				}
+			}
+		} else if existingCfg != nil && existingCfg.EpicLinkFieldID != "" {
+			epicLinkFieldID = existingCfg.EpicLinkFieldID
+		}
+	} else {
+		// Use existing value if present
+		if existingCfg != nil && existingCfg.EpicLinkFieldID != "" {
+			epicLinkFieldID = existingCfg.EpicLinkFieldID
+		}
+	}
+
 	// Merge with existing config to preserve all settings
 	cfg := &config.Config{
-		JiraURL:            jiraURL,
-		DefaultProject:     defaultProject,
-		DefaultTaskType:    defaultTaskType,
+		JiraURL:         jiraURL,
+		DefaultProject:  defaultProject,
+		DefaultTaskType: defaultTaskType,
 		StoryPointsFieldID: storyPointsFieldID,
+		EpicLinkFieldID: epicLinkFieldID,
 	}
 
 	// Preserve existing values if they exist

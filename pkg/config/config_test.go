@@ -160,3 +160,52 @@ func TestNewConfigFields(t *testing.T) {
 		}
 	})
 }
+
+func TestEpicLinkFieldID(t *testing.T) {
+	t.Run("Load config with EpicLinkFieldID missing (should use empty string)", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "config.yaml")
+
+		cfg := &Config{
+			JiraURL:        "https://test.atlassian.net",
+			DefaultProject: "TEST",
+		}
+
+		if err := SaveConfig(cfg, configPath); err != nil {
+			t.Fatalf("Failed to save config: %v", err)
+		}
+
+		loaded, err := LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("Failed to load config: %v", err)
+		}
+
+		if loaded.EpicLinkFieldID != "" {
+			t.Errorf("Expected EpicLinkFieldID '' (default), got '%s'", loaded.EpicLinkFieldID)
+		}
+	})
+
+	t.Run("Load config with EpicLinkFieldID set", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "config.yaml")
+
+		cfg := &Config{
+			JiraURL:         "https://test.atlassian.net",
+			DefaultProject:  "TEST",
+			EpicLinkFieldID: "customfield_10011",
+		}
+
+		if err := SaveConfig(cfg, configPath); err != nil {
+			t.Fatalf("Failed to save config: %v", err)
+		}
+
+		loaded, err := LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("Failed to load config: %v", err)
+		}
+
+		if loaded.EpicLinkFieldID != "customfield_10011" {
+			t.Errorf("Expected EpicLinkFieldID 'customfield_10011', got '%s'", loaded.EpicLinkFieldID)
+		}
+	})
+}

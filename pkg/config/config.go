@@ -26,6 +26,7 @@ type Config struct {
 	DescriptionQualityAI   bool     `yaml:"description_quality_ai,omitempty"`   // Enable Gemini AI analysis for description quality (default: false)
 	SeverityFieldID        string   `yaml:"severity_field_id,omitempty"`         // Custom field ID for severity (optional)
 	DefaultBoardID         int      `yaml:"default_board_id,omitempty"`         // Default board ID if auto-detection fails (default: 0)
+	EpicLinkFieldID        string   `yaml:"epic_link_field_id,omitempty"`       // Epic Link custom field ID (auto-detected or manually configured)
 }
 
 // GetConfigPath returns the path for the config file

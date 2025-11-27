@@ -13,10 +13,10 @@ This tool is a command-line Go application designed to streamline Jira workflows
 ### 2\. General Requirements
 
   * **Configuration:**
-      * A default config file (e.g., `~/.jira-helper/config.yaml`) will store Jira connection details, default project (`default_project`), default task type (`default_task_type`), and "favorite" lists for assignees, sprints, and releases.
+      * A default config file (e.g., `~/.jira-tool/config.yaml`) will store Jira connection details, default project (`default_project`), default task type (`default_task_type`), and "favorite" lists for assignees, sprints, and releases.
   * **Caching:**
       * The tool **must cache** all lists queried from Jira (e.g., users, priorities, sprints, fix versions).
-      * This cache should be stored locally (e.g., in `~/.jira-helper/cache.json`).
+      * This cache should be stored locally (e.g., in `~/.jira-tool/cache.json`).
   * **Cache Busting:**
       * A command `jira refresh --cache` must be available to delete the cache and force the tool to fetch fresh data from Jira on its next run.
   * **Editor Integration:**

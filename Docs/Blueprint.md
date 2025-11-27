@@ -1,4 +1,4 @@
-Here is a detailed, step-by-step blueprint for building the `go-jira-helper` project, followed by a series of iterative, test-driven prompts designed for a code-generation LLM.
+Here is a detailed, step-by-step blueprint for building the `jira-tool` project, followed by a series of iterative, test-driven prompts designed for a code-generation LLM.
 
 -----
 
@@ -110,9 +110,9 @@ The core philosophy is to build the application from a stable foundation outward
 Here are the step-by-step prompts for a code-generation LLM.
 
 ```
-We are building a Go CLI tool called `go-jira-helper` using the `cobra` library and a test-driven (TDD) approach.
+We are building a Go CLI tool called `jira-tool` using the `cobra` library and a test-driven (TDD) approach.
 
-Create a new `go.mod` file for this project (e.g., `module go-jira-helper`) and then implement the first step.
+Create a new `go.mod` file for this project (e.g., `module jira-tool`) and then implement the first step.
 
 Create the main application entrypoint (`main.go`) and the root command (`cmd/root.go`). The root command should be the main entrypoint and should not have its own `Run` function, as it will only host subcommands. Include a basic `cmd/root_test.go` to ensure the command is set up, but it doesn't need to do much yet. Use standard Go project layout.
 ```
@@ -122,7 +122,7 @@ Now, let's define the configuration for our tool.
 
 In `pkg/config/config.go`, define a `Config` struct that holds the `JiraURL`, `JiraUser`, and `DefaultProject` and `DefaultTaskType`.
 Also, create `LoadConfig(path string)` and `SaveConfig(cfg *Config, path string)` functions. The config file should be in YAML format.
-Define a `GetConfigPath()` function that returns the default path (e.g., `~/.jira-helper/config.yaml`).
+Define a `GetConfigPath()` function that returns the default path (e.g., `~/.jira-tool/config.yaml`).
 In `pkg/config/config_test.go`, write a test for `LoadConfig` and `SaveConfig` that writes and reads from a *temporary* test file to verify the YAML (un)marshaling works.
 ```
 
@@ -268,7 +268,7 @@ Create the reusable System Editor module.
 In `pkg/editor/editor.go`:
 1.  Create a function `OpenInEditor(initialContent string) (string, error)`.
 2.  This function should:
-    * Create a temporary file (e.g., `jira-helper-*.md`).
+    * Create a temporary file (e.g., `jira-tool-*.md`).
     * Write `initialContent` to it.
     * Get the system editor from `os.Getenv("EDITOR")` (default to `vim` or `nano`).
     * Use `exec.Command` to run the editor with the temp file as an argument, and set `cmd.Stdin`, `cmd.Stdout`, `cmd.Stderr` to `os.Stdin`, `os.Stdout`, `os.Stderr`.
@@ -389,7 +389,7 @@ Finally, implement the caching layer and the `refresh` command.
 
 In `cmd/refresh.go`:
 1.  Create the `refreshCmd` with a `--cache` flag.
-2.  In `RunE`, get the cache path (e.g., `~/.jira-helper/cache.json`) and delete the file.
+2.  In `RunE`, get the cache path (e.g., `~/.jira-tool/cache.json`) and delete the file.
 
 Modify `pkg/jira/client.go`:
 1.  Add a `cache` field to the `jiraClient` struct (e.g., `cache *Cache`).

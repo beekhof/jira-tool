@@ -21,7 +21,9 @@ type JiraClient interface {
 	UpdateTicketPriority(ticketID, priorityID string) error
 	CreateTicket(project, taskType, summary string) (string, error)
 	CreateTicketWithParent(project, taskType, summary, parentKey string) (string, error)
+	CreateTicketWithEpicLink(project, taskType, summary, epicKey, epicLinkFieldID string) (string, error)
 	SearchTickets(jql string) ([]Issue, error)
+	GetIssue(issueKey string) (*Issue, error)
 	SearchUsers(query string) ([]User, error)
 	AssignTicket(ticketID, userAccountID, userName string) error
 	UnassignTicket(ticketID string) error
@@ -44,6 +46,7 @@ type JiraClient interface {
 	DetectSeverityField(projectKey string) (string, error)
 	GetSeverityFieldValues(fieldID string) ([]string, error)
 	GetBoardsForProject(projectKey string) ([]Board, error)
+	DetectEpicLinkField(projectKey string) (string, error)
 }
 
 // Attachment represents a Jira attachment
@@ -482,6 +485,72 @@ func (c *jiraClient) CreateTicketWithParent(project, taskType, summary, parentKe
 		return "", fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, string(body))
 	}
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var createResp CreateTicketResponse
+	if err := json.Unmarshal(body, &createResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return createResp.Key, nil
+}
+
+// CreateTicketWithEpicLink creates a new Jira ticket with Epic Link field
+func (c *jiraClient) CreateTicketWithEpicLink(project, taskType, summary, epicKey, epicLinkFieldID string) (string, error) {
+	endpoint := fmt.Sprintf("%s/rest/api/2/issue", c.baseURL)
+
+	// Construct the JSON payload
+	payload := map[string]interface{}{
+		"fields": map[string]interface{}{
+			"project": map[string]interface{}{
+				"key": project,
+			},
+			"summary": summary,
+			"issuetype": map[string]interface{}{
+				"name": taskType,
+			},
+		},
+	}
+
+	// Add Epic Link field dynamically
+	fields := payload["fields"].(map[string]interface{})
+	fields[epicLinkFieldID] = epicKey
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Create the POST request
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	c.setAuth(req)
+
+	// Execute the request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			return "", fmt.Errorf("authentication failed. Your Jira token may be invalid. Please run 'jira init'")
+		}
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, string(body))
+	}
+
+	// Parse response
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed to read response: %w", err)
@@ -935,6 +1004,18 @@ func (c *jiraClient) GetIssuesForRelease(releaseID string) ([]Issue, error) {
 // SearchTickets performs a JQL search and returns issues
 func (c *jiraClient) SearchTickets(jql string) ([]Issue, error) {
 	return c.searchIssues(jql)
+}
+
+// GetIssue fetches a single ticket by key
+func (c *jiraClient) GetIssue(issueKey string) (*Issue, error) {
+	issues, err := c.SearchTickets(fmt.Sprintf("key = %s", issueKey))
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch issue %s: %w", issueKey, err)
+	}
+	if len(issues) == 0 {
+		return nil, fmt.Errorf("issue %s not found", issueKey)
+	}
+	return &issues[0], nil
 }
 
 // searchIssues performs a JQL search

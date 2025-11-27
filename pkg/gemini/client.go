@@ -155,28 +155,38 @@ Ask only ONE clear, concise question. Do not include any preamble or explanation
 
 // getDefaultSpikeQuestionPrompt returns the default question generation prompt template for spikes
 func getDefaultSpikeQuestionPrompt() string {
-	return `You are helping to create a research spike ticket. Based on the following context and conversation history, ask ONE question to help constrain and focus the research area.
+	return `You are helping to create a Jira ticket for research on a specific topic.
+Based on the following context and conversation history, ask ONE question to help explain or constrain the task for an engineer to complete.
+Important: some research is about finding out what we don't know yet, other research is about finding out if a solution is possible or not.
+
+Areas of interest include: 
+- why is this research needed
+- what is the problem that needs to be solved, or domain that needs to be understood
+- what criteria can we use to determine if the research is complete
+- what are the possible outcomes of the research
 
 Context: {{context}}
 
 {{history}}
 
-Ask only ONE clear, concise question that helps define the scope or boundaries of the research. Focus on understanding what needs to be investigated, not on dictating a solution. Do not include any preamble or explanation, just the question.`
+Ask only ONE clear, concise question that helps define the scope or boundaries of the research. 
+Focus on understanding what needs to be investigated, DO NOT try to find or provide a solution.
+Do not include any preamble or explanation, just the question.`
 }
 
 // getDefaultDescriptionPrompt returns the default description generation prompt template
 func getDefaultDescriptionPrompt() string {
-	return `You are helping to create a Jira ticket description. Based on the following context and conversation history, write a clear, comprehensive Jira ticket description.
+	return `You are helping to create a Jira ticket description for a research on a specific topic. 
+Based on the following context and conversation history, write a clear, and concise Jira ticket description that includes:
+- Clear explanation of what needs to be done
+- Any relevant context or background
+- Expected outcomes or acceptance criteria
+Format it as plain text suitable for a Jira description field.
 
 Context: {{context}}
 
 {{history}}
-
-Write a professional Jira ticket description that includes:
-- Clear explanation of what needs to be done
-- Any relevant context or background
-- Expected outcomes or acceptance criteria if applicable
-Format it as plain text suitable for a Jira description field.`
+`
 }
 
 // getDefaultSpikePrompt returns the default spike/research prompt template
@@ -187,11 +197,12 @@ Context: {{context}}
 
 {{history}}
 
-Write a professional research spike description that includes:
-- Research objectives and questions to answer
-- Areas to investigate
-- Expected deliverables and findings
-- Success criteria for the research
+Write a concise and professional description that includes:
+- Core question to be answered
+- Clear explanation of what needs to be researched
+- Any relevant context or background
+- Expected outcomes or acceptance criteria
+
 Format it as plain text suitable for a Jira description field.`
 }
 

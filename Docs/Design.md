@@ -1,10 +1,10 @@
-Here is a comprehensive, developer-ready specification for the `go-jira-helper` tool, compiling all requirements from our brainstorming session and adding necessary architecture, data, error, and testing plans.
+Here is a comprehensive, developer-ready specification for the `jira-tool` tool, compiling all requirements from our brainstorming session and adding necessary architecture, data, error, and testing plans.
 
 -----
 
 ## 1\. 📖 Overview
 
-The `go-jira-helper` is a command-line interface (CLI) tool built in Go. Its primary purpose is to streamline the Jira workflow for engineers and product managers by integrating directly with the Jira and Gemini APIs.
+The `jira-tool` is a command-line interface (CLI) tool built in Go. Its primary purpose is to streamline the Jira workflow for engineers and product managers by integrating directly with the Jira and Gemini APIs.
 
 The tool will reduce context-switching and automate repetitive tasks, including:
 
@@ -27,17 +27,17 @@ The application will be a single, standalone Go binary.
 
 ## 3\. 🗄️ Data & State Management
 
-State is managed locally through two primary files stored in a dedicated directory (e.g., `~/.jira-helper/`).
+State is managed locally through two primary files stored in a dedicated directory (e.g., `~/.jira-tool/`).
 
 ### 3.1. Configuration File (`config.yaml`)
 
 A plain-text YAML file for all user-specific settings.
 
-  * **Location:** `~/.jira-helper/config.yaml`
+  * **Location:** `~/.jira-tool/config.yaml`
   * **Purpose:** Stores API keys, Jira instance details, and user preferences.
   * **Example Structure:**
     ```yaml
-    # ~/.jira-helper/config.yaml
+    # ~/.jira-tool/config.yaml
 
     # Jira Connection
     jira_url: "https://your-company.atlassian.net"
@@ -74,7 +74,7 @@ A plain-text YAML file for all user-specific settings.
 
 A JSON file for storing non-critical, time-consuming API responses.
 
-  * **Location:** `~/.jira-helper/cache.json`
+  * **Location:** `~/.jira-tool/cache.json`
   * **Purpose:** To improve performance by caching lists of users, priorities, sprints, and fix versions.
   * **Mechanism:**
       * Before making a list-based API call (e.g., "get all users"), the tool checks the cache.
@@ -214,7 +214,7 @@ This flow is a reusable module triggered by `jira create` and `jira accept`.
 This flow is triggered by any `[e(dit)]` prompt.
 
 1.  The tool generates the text to be edited (e.g., a description, or a Markdown epic plan).
-2.  This text is written to a temporary file (e.g., `/tmp/jira-helper-edit.md`).
+2.  This text is written to a temporary file (e.g., `/tmp/jira-tool-edit.md`).
 3.  The tool opens this file using the system editor (`$EDITOR`).
 4.  The Go application **blocks** and waits for the editor process to terminate.
 5.  Once the user saves and closes the editor, the tool reads the contents of the temporary file.
@@ -260,4 +260,4 @@ A comprehensive testing strategy is required.
       * These tests should run against a **dedicated, non-production Jira test project**.
       * The test script will require a live Jira token and Gemini key (passed as environment variables).
       * The script will compile the Go binary.
-      * It will execute the binary (e.g., `./jira-helper create "E2E Test Ticket"`) and then use the Jira API *itself* to verify that the ticket was *actually* created, updated, and (finally) deleted to clean up.
+      * It will execute the binary (e.g., `./jira-tool create "E2E Test Ticket"`) and then use the Jira API *itself* to verify that the ticket was *actually* created, updated, and (finally) deleted to clean up.

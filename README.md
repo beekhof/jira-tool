@@ -74,15 +74,7 @@ story_point_options:
   - 8
   - 13
 story_points_field_id: customfield_10016  # Optional: customize if your Jira uses a different field ID
-favorite_assignees:
-  - user1@example.com
-  - user2@example.com
-favorite_sprints:
-  - "Sprint 1"
-  - "Sprint 2"
-favorite_releases:
-  - "v1.0"
-  - "v2.0"
+epic_link_field_id: customfield_10011     # Optional: Epic Link custom field ID (auto-detected during init)
 ```
 
 ### Configuration Options
@@ -96,6 +88,10 @@ favorite_releases:
 - **`story_points_field_id`** (optional): Custom field ID for story points in your Jira instance (default: `customfield_10016`)
   - **Automatically detected during `jira utils init`**: The tool will query your Jira instance to find the story points field
   - If automatic detection fails, it falls back to `customfield_10016`
+  - You can manually configure it in your config file if needed
+- **`epic_link_field_id`** (optional): Custom field ID for Epic Link in your Jira instance
+  - **Automatically detected during `jira utils init`**: The tool will query your Jira instance to find the Epic Link field
+  - If automatic detection fails, you'll be prompted to enter it when creating a ticket with an Epic parent
   - You can manually configure it in your config file if needed
 
 #### Gemini AI Settings
@@ -220,16 +216,26 @@ jira utils init
 ```
 
 ### `create [SUMMARY]`
-Create a new Jira ticket with optional AI-generated description.
+Create a new Jira ticket with optional AI-generated description and parent ticket linking.
 
 ```bash
 jira create "Fix login bug"
 jira create --project ENG --type Bug "Critical security issue"
+jira create --parent PROJ-123 "New story in epic"
+jira create "New subtask"  # Interactive parent selection
 ```
 
 **Flags:**
 - `--project, -p`: Override default project
 - `--type, -t`: Override default task type
+- `--parent, -P`: Parent ticket key (Epic or parent ticket)
+
+**Parent Ticket Support:**
+- You can specify a parent ticket using the `--parent` flag with a ticket key (e.g., `PROJ-123`)
+- If no `--parent` flag is provided, you'll be prompted to select a parent interactively
+- The tool automatically detects if the parent is an Epic (uses Epic Link field) or a regular parent ticket (uses Parent Link field)
+- Recent parent tickets are tracked and shown first in the interactive selection
+- Only valid parent tickets (Epics or tickets with subtasks) are shown in the selection list
 
 ### `estimate [TICKET_ID]`
 Estimate story points for a ticket. If no ticket ID is provided, shows a paginated list of tickets without story points.
