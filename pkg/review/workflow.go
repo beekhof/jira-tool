@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/beekhof/jira-tool/pkg/config"
+	"github.com/beekhof/jira-tool/pkg/editor"
 	"github.com/beekhof/jira-tool/pkg/gemini"
 	"github.com/beekhof/jira-tool/pkg/jira"
 	"github.com/beekhof/jira-tool/pkg/qa"
