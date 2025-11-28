@@ -4,12 +4,15 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/beekhof/jira-tool/pkg/config"
 	"github.com/spf13/cobra"
 )
 
 var (
-	configDir string
-	noCache   bool
+	configDir  string
+	noCache    bool
+	filterFlag string
+	noFilterFlag bool
 )
 
 var rootCmd = &cobra.Command{
@@ -41,8 +44,29 @@ func GetNoCache() bool {
 	return noCache
 }
 
+// GetTicketFilter returns the active ticket filter based on precedence:
+// --no-filter > --filter (command-line) > ticket_filter (config)
+func GetTicketFilter(cfg *config.Config) string {
+	// If --no-filter is set, return empty string (bypass all filters)
+	if noFilterFlag {
+		return ""
+	}
+	// If --filter flag is set, use it (overrides config)
+	if filterFlag != "" {
+		return filterFlag
+	}
+	// Otherwise, use config filter if set
+	if cfg != nil && cfg.TicketFilter != "" {
+		return cfg.TicketFilter
+	}
+	// No filter set
+	return ""
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVar(&configDir, "config-dir", "", "Configuration directory (default: ~/.jira-tool)")
 	rootCmd.PersistentFlags().BoolVar(&noCache, "no-cache", false, "Bypass cache and fetch fresh data from API")
+	rootCmd.PersistentFlags().StringVar(&filterFlag, "filter", "", "JQL filter to append to all ticket queries")
+	rootCmd.PersistentFlags().BoolVar(&noFilterFlag, "no-filter", false, "Bypass ticket filter (overrides --filter and config)")
 	// Commands register themselves in their own init() functions
 }

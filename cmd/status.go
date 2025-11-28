@@ -419,10 +419,14 @@ func runSpikesStatus(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("default_project not configured. Please run 'jira init'")
 	}
 
+	// Get ticket filter
+	filter := GetTicketFilter(cfg)
+
 	// Search for spike tickets - JQL ~ operator is case-insensitive
 	// Search for tickets with "SPIKE" anywhere in summary, then filter to those starting with SPIKE
 	// We search broadly first to catch all variations, then filter in code
 	jql := fmt.Sprintf("project = %s AND summary ~ \"spike\" ORDER BY status, updated DESC", projectKey)
+	jql = jira.ApplyTicketFilter(jql, filter)
 	allIssues, err := client.SearchTickets(jql)
 	if err != nil {
 		return fmt.Errorf("failed to search for spike tickets: %w", err)

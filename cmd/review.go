@@ -50,10 +50,15 @@ func runReview(cmd *cobra.Command, args []string) error {
 
 	var issues []jira.Issue
 
+	// Get ticket filter
+	filter := GetTicketFilter(cfg)
+
 	// If a specific ticket ID is provided, fetch just that one
 	if len(args) == 1 {
 		ticketID := args[0]
-		issues, err = client.SearchTickets(fmt.Sprintf("key = %s", ticketID))
+		jql := fmt.Sprintf("key = %s", ticketID)
+		jql = jira.ApplyTicketFilter(jql, filter)
+		issues, err = client.SearchTickets(jql)
 		if err != nil {
 			return err
 		}
@@ -91,6 +96,8 @@ func runReview(cmd *cobra.Command, args []string) error {
 			jql = fmt.Sprintf("%s AND (%s)", projectPart, conditions)
 		}
 
+		// Apply filter
+		jql = jira.ApplyTicketFilter(jql, filter)
 		issues, err = client.SearchTickets(jql)
 		if err != nil {
 			return err
@@ -331,7 +338,10 @@ func handleReviewAction(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 
 	// Refresh the ticket data to show updated info
 	if success && issueIndex >= 0 && issueIndex < len(issues) {
-		updated, err := client.SearchTickets(fmt.Sprintf("key = %s", selectedIssue.Key))
+		filter := GetTicketFilter(cfg)
+		refreshJQL := fmt.Sprintf("key = %s", selectedIssue.Key)
+		refreshJQL = jira.ApplyTicketFilter(refreshJQL, filter)
+		updated, err := client.SearchTickets(refreshJQL)
 		if err == nil && len(updated) > 0 {
 			issues[issueIndex] = updated[0]
 		}
@@ -504,8 +514,13 @@ func handleDetail(client jira.JiraClient, reader *bufio.Reader, ticketID, summar
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Get ticket filter
+	filter := GetTicketFilter(cfg)
+
 	// Get ticket details to check for spike (need summary and key)
-	issues, err := client.SearchTickets(fmt.Sprintf("key = %s", ticketID))
+	jql := fmt.Sprintf("key = %s", ticketID)
+	jql = jira.ApplyTicketFilter(jql, filter)
+	issues, err := client.SearchTickets(jql)
 	if err != nil {
 		return fmt.Errorf("failed to get ticket details: %w", err)
 	}
@@ -562,9 +577,14 @@ func handleEstimate(client jira.JiraClient, reader *bufio.Reader, cfg *config.Co
 		storyPoints = []int{1, 2, 3, 5, 8, 13}
 	}
 
+	// Get ticket filter
+	filter := GetTicketFilter(cfg)
+
 	// Fetch ticket details for Gemini estimation
 	fmt.Printf("Fetching ticket details for %s...\n", ticketID)
-	issues, err := client.SearchTickets(fmt.Sprintf("key = %s", ticketID))
+	jql := fmt.Sprintf("key = %s", ticketID)
+	jql = jira.ApplyTicketFilter(jql, filter)
+	issues, err := client.SearchTickets(jql)
 	if err != nil {
 		return fmt.Errorf("failed to fetch ticket: %w", err)
 	}

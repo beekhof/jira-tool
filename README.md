@@ -75,6 +75,7 @@ story_point_options:
   - 13
 story_points_field_id: customfield_10016  # Optional: customize if your Jira uses a different field ID
 epic_link_field_id: customfield_10011     # Optional: Epic Link custom field ID (auto-detected during init)
+ticket_filter: "assignee = currentUser()" # Optional: JQL filter to append to all ticket queries
 ```
 
 ### Configuration Options
@@ -93,6 +94,12 @@ epic_link_field_id: customfield_10011     # Optional: Epic Link custom field ID 
   - **Automatically detected during `jira utils init`**: The tool will query your Jira instance to find the Epic Link field
   - If automatic detection fails, you'll be prompted to enter it when creating a ticket with an Epic parent
   - You can manually configure it in your config file if needed
+- **`ticket_filter`** (optional): JQL filter to append to all ticket queries
+  - Applied to all commands that query tickets (review, assign, estimate, create's parent selection, etc.)
+  - Filter is appended with AND: `(existing_query) AND (filter)`
+  - Can be overridden with `--filter` global flag
+  - Can be bypassed with `--no-filter` global flag
+  - Examples: `"assignee = currentUser()"`, `"status != Done"`, `"project = PROJ AND assignee = currentUser()"`
 
 #### Gemini AI Settings
 
@@ -390,10 +397,17 @@ The tool uses Bearer token authentication for Jira. Your API token is stored sec
 
 - **`--config-dir`**: Specify a custom configuration directory (default: `~/.jira-tool`)
 - **`--no-cache`**: Bypass cache and fetch fresh data from API (useful for testing and debugging)
+- **`--filter`**: JQL filter to append to all ticket queries (overrides config filter)
+- **`--no-filter`**: Bypass ticket filter (overrides `--filter` and config filter)
 
-Example:
+**Filter Precedence**: `--no-filter` > `--filter` (command-line) > `ticket_filter` (config)
+
+Examples:
 ```bash
 jira --no-cache --config-dir /path/to/config review
+jira --filter "assignee = currentUser()" review
+jira --filter "status != Done" assign
+jira --no-filter review  # Bypass filter for this command
 ```
 
 ## Error Handling

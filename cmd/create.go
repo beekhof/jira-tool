@@ -268,8 +268,12 @@ func runCreate(cmd *cobra.Command, args []string) error {
 			reviewResponse = strings.TrimSpace(strings.ToLower(reviewResponse))
 
 			if reviewResponse == "y" || reviewResponse == "yes" {
+				// Get ticket filter
+				filter := GetTicketFilter(cfg)
 				// Fetch updated ticket details
-				issues, err := client.SearchTickets(fmt.Sprintf("key = %s", ticketKey))
+				jql := fmt.Sprintf("key = %s", ticketKey)
+				jql = jira.ApplyTicketFilter(jql, filter)
+				issues, err := client.SearchTickets(jql)
 				if err != nil {
 					return fmt.Errorf("failed to fetch ticket: %w", err)
 				}
@@ -297,6 +301,9 @@ func selectParentTicket(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 		// If state can't be loaded, continue without recent list
 		state = &config.State{}
 	}
+
+	// Get ticket filter
+	filter := GetTicketFilter(cfg)
 
 	// Get recent parent tickets and filter to valid ones
 	recentTickets := state.RecentParentTickets
@@ -345,8 +352,10 @@ func selectParentTicket(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 			if jira.IsEpic(&issue) {
 				validIssues = append(validIssues, issue)
 			} else {
-				// Check if it has subtasks
-				subtasks, err := client.SearchTickets(fmt.Sprintf("parent = %s", issue.Key))
+			// Check if it has subtasks
+			subtaskJQL := fmt.Sprintf("parent = %s", issue.Key)
+			subtaskJQL = jira.ApplyTicketFilter(subtaskJQL, filter)
+			subtasks, err := client.SearchTickets(subtaskJQL)
 				if err == nil && len(subtasks) > 0 {
 					validIssues = append(validIssues, issue)
 				}
@@ -404,7 +413,11 @@ func selectParentTicket(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 		selectedTicketKey = validRecentTickets[selected-1]
 	} else if showRecent && selected == len(validRecentTickets)+1 {
 		// "Other..." selected - search all tickets
-		issues, err := client.SearchTickets(fmt.Sprintf("project = %s ORDER BY updated DESC", projectKey))
+		// Get ticket filter
+		filter := GetTicketFilter(cfg)
+		jql := fmt.Sprintf("project = %s ORDER BY updated DESC", projectKey)
+		jql = jira.ApplyTicketFilter(jql, filter)
+		issues, err := client.SearchTickets(jql)
 		if err != nil {
 			return "", fmt.Errorf("failed to search tickets: %w", err)
 		}
@@ -489,7 +502,9 @@ func reviewTicket(client jira.JiraClient, reader *bufio.Reader, cfg *config.Conf
 			} else {
 				fmt.Println("Ticket assigned successfully.")
 				// Refresh ticket data
-				updated, err := client.SearchTickets(fmt.Sprintf("key = %s", issue.Key))
+				refreshJQL := fmt.Sprintf("key = %s", issue.Key)
+				refreshJQL = jira.ApplyTicketFilter(refreshJQL, GetTicketFilter(cfg))
+				updated, err := client.SearchTickets(refreshJQL)
 				if err == nil && len(updated) > 0 {
 					issue = updated[0]
 				}
@@ -500,7 +515,9 @@ func reviewTicket(client jira.JiraClient, reader *bufio.Reader, cfg *config.Conf
 			} else {
 				fmt.Println("Ticket triaged successfully.")
 				// Refresh ticket data
-				updated, err := client.SearchTickets(fmt.Sprintf("key = %s", issue.Key))
+				refreshJQL := fmt.Sprintf("key = %s", issue.Key)
+				refreshJQL = jira.ApplyTicketFilter(refreshJQL, GetTicketFilter(cfg))
+				updated, err := client.SearchTickets(refreshJQL)
 				if err == nil && len(updated) > 0 {
 					issue = updated[0]
 				}
@@ -511,7 +528,9 @@ func reviewTicket(client jira.JiraClient, reader *bufio.Reader, cfg *config.Conf
 			} else {
 				fmt.Println("Story points updated successfully.")
 				// Refresh ticket data
-				updated, err := client.SearchTickets(fmt.Sprintf("key = %s", issue.Key))
+				refreshJQL := fmt.Sprintf("key = %s", issue.Key)
+				refreshJQL = jira.ApplyTicketFilter(refreshJQL, GetTicketFilter(cfg))
+				updated, err := client.SearchTickets(refreshJQL)
 				if err == nil && len(updated) > 0 {
 					issue = updated[0]
 				}

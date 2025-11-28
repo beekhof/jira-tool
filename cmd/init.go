@@ -320,6 +320,20 @@ func runInit(cmd *cobra.Command, args []string) error {
 		cfg.DefaultBoardID = existingCfg.DefaultBoardID
 	}
 
+	// Prompt for ticket filter
+	fmt.Print("\nTicket filter (JQL to append to all ticket queries, optional, press Enter to skip): ")
+	filterInput, err := reader.ReadString('\n')
+	if err == nil {
+		filterInput = strings.TrimSpace(filterInput)
+		if filterInput != "" {
+			cfg.TicketFilter = filterInput
+		} else if existingCfg != nil && existingCfg.TicketFilter != "" {
+			cfg.TicketFilter = existingCfg.TicketFilter
+		}
+	} else if existingCfg != nil {
+		cfg.TicketFilter = existingCfg.TicketFilter
+	}
+
 	if err := config.SaveConfig(cfg, configPath); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}

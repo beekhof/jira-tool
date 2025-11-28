@@ -209,3 +209,52 @@ func TestEpicLinkFieldID(t *testing.T) {
 		}
 	})
 }
+
+func TestTicketFilter(t *testing.T) {
+	t.Run("Load config with TicketFilter missing (should use empty string)", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "config.yaml")
+
+		cfg := &Config{
+			JiraURL:        "https://test.atlassian.net",
+			DefaultProject: "TEST",
+		}
+
+		if err := SaveConfig(cfg, configPath); err != nil {
+			t.Fatalf("Failed to save config: %v", err)
+		}
+
+		loaded, err := LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("Failed to load config: %v", err)
+		}
+
+		if loaded.TicketFilter != "" {
+			t.Errorf("Expected TicketFilter '' (default), got '%s'", loaded.TicketFilter)
+		}
+	})
+
+	t.Run("Load config with TicketFilter set", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		configPath := filepath.Join(tmpDir, "config.yaml")
+
+		cfg := &Config{
+			JiraURL:        "https://test.atlassian.net",
+			DefaultProject: "TEST",
+			TicketFilter:   "assignee = currentUser()",
+		}
+
+		if err := SaveConfig(cfg, configPath); err != nil {
+			t.Fatalf("Failed to save config: %v", err)
+		}
+
+		loaded, err := LoadConfig(configPath)
+		if err != nil {
+			t.Fatalf("Failed to load config: %v", err)
+		}
+
+		if loaded.TicketFilter != "assignee = currentUser()" {
+			t.Errorf("Expected TicketFilter 'assignee = currentUser()', got '%s'", loaded.TicketFilter)
+		}
+	})
+}

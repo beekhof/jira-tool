@@ -60,9 +60,14 @@ func runEstimate(cmd *cobra.Command, args []string) error {
 
 // estimateSingleTicket estimates a single ticket
 func estimateSingleTicket(client jira.JiraClient, cfg *config.Config, ticketID string, storyPoints []int, configDir string) error {
+	// Get ticket filter
+	filter := GetTicketFilter(cfg)
+
 	// Fetch ticket details for Gemini estimation
 	fmt.Printf("Fetching ticket details for %s...\n", ticketID)
-	issues, err := client.SearchTickets(fmt.Sprintf("key = %s", ticketID))
+	jql := fmt.Sprintf("key = %s", ticketID)
+	jql = jira.ApplyTicketFilter(jql, filter)
+	issues, err := client.SearchTickets(jql)
 	if err != nil {
 		return fmt.Errorf("failed to fetch ticket: %w", err)
 	}
@@ -160,6 +165,9 @@ func estimateMultipleTickets(client jira.JiraClient, cfg *config.Config, storyPo
 	}
 
 	jql := fmt.Sprintf("project = %s AND %s is EMPTY ORDER BY updated DESC", project, storyPointsFieldID)
+	// Apply ticket filter
+	filter := GetTicketFilter(cfg)
+	jql = jira.ApplyTicketFilter(jql, filter)
 	allIssues, err := client.SearchTickets(jql)
 	if err != nil {
 		return fmt.Errorf("failed to search tickets: %w", err)

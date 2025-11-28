@@ -76,9 +76,14 @@ func assignSingleTicket(client jira.JiraClient, cfg *config.Config, ticketID str
 	configDir := GetConfigDir()
 	configPath := config.GetConfigPath(configDir)
 
+	// Get ticket filter
+	filter := GetTicketFilter(cfg)
+
 	// Fetch ticket details
 	fmt.Printf("Fetching ticket details for %s...\n", ticketID)
-	issues, err := client.SearchTickets(fmt.Sprintf("key = %s", ticketID))
+	jql := fmt.Sprintf("key = %s", ticketID)
+	jql = jira.ApplyTicketFilter(jql, filter)
+	issues, err := client.SearchTickets(jql)
 	if err != nil {
 		return fmt.Errorf("failed to fetch ticket: %w", err)
 	}
@@ -92,7 +97,9 @@ func assignSingleTicket(client jira.JiraClient, cfg *config.Config, ticketID str
 	}
 
 	// Verify assignment
-	updated, err := client.SearchTickets(fmt.Sprintf("key = %s", ticketID))
+	refreshJQL := fmt.Sprintf("key = %s", ticketID)
+	refreshJQL = jira.ApplyTicketFilter(refreshJQL, filter)
+	updated, err := client.SearchTickets(refreshJQL)
 	if err == nil && len(updated) > 0 {
 		assignee := getAssigneeName(updated[0])
 		if assignee != "Unassigned" {
@@ -391,6 +398,9 @@ func unassignMultipleTickets(client jira.JiraClient, cfg *config.Config, allFlag
 	}
 
 	jql = fmt.Sprintf("%s ORDER BY updated DESC", jql)
+	// Apply ticket filter
+	filter := GetTicketFilter(cfg)
+	jql = jira.ApplyTicketFilter(jql, filter)
 	allIssues, err := client.SearchTickets(jql)
 	if err != nil {
 		return fmt.Errorf("failed to search tickets: %w", err)
