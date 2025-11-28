@@ -166,8 +166,8 @@ func runReview(cmd *cobra.Command, args []string) error {
 		fmt.Printf("\n=== Page %d of %d (%d tickets) ===\n\n", currentPage+1, totalPages, len(issues))
 
 		// Display tickets in a table format
-		fmt.Printf("%-4s %-12s %-50s %-12s %-20s %-8s\n", "#", "Key", "Summary", "Priority", "Assignee", "Status")
-		fmt.Println(strings.Repeat("-", 110))
+		fmt.Printf("%-4s %-12s %-10s %-50s %-12s %-20s %-8s\n", "#", "Key", "Type", "Summary", "Priority", "Assignee", "Status")
+		fmt.Println(strings.Repeat("-", 120))
 
 		for i, issue := range pageIssues {
 			idx := start + i + 1
@@ -183,6 +183,9 @@ func runReview(cmd *cobra.Command, args []string) error {
 				assignee = issue.Fields.Assignee.DisplayName
 			}
 
+			// Get issue type
+			issueType := issue.Fields.IssueType.Name
+
 			// Truncate summary if too long
 			summary := issue.Fields.Summary
 			if len(summary) > 48 {
@@ -195,8 +198,8 @@ func runReview(cmd *cobra.Command, args []string) error {
 				marker = "✓ "
 			}
 
-			fmt.Printf("%-4d %-12s %-50s %-12s %-20s %-8s %s\n",
-				idx, issue.Key, summary, priority, assignee, issue.Fields.Status.Name, marker)
+			fmt.Printf("%-4d %-12s %-10s %-50s %-12s %-20s %-8s %s\n",
+				idx, issue.Key, issueType, summary, priority, assignee, issue.Fields.Status.Name, marker)
 		}
 
 		fmt.Println()
