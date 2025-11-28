@@ -238,11 +238,36 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 						if err != nil {
 							return false, err
 						}
-						// Update ticket
-						if err := client.UpdateTicketDescription(ticket.Key, description); err != nil {
+						// Print the generated description and ask for confirmation
+						fmt.Println("\nGenerated description:")
+						fmt.Println("---")
+						fmt.Println(description)
+						fmt.Println("---")
+						fmt.Print("\nUpdate ticket with this description? [Y/n/e(dit)] ")
+						confirm, err := reader.ReadString('\n')
+						if err != nil {
 							return false, err
 						}
-						return true, nil
+						confirm = strings.TrimSpace(strings.ToLower(confirm))
+
+						if confirm == "e" || confirm == "edit" {
+							// Open in editor
+							editedDescription, err := editor.OpenInEditor(description)
+							if err != nil {
+								return false, fmt.Errorf("failed to edit description: %w", err)
+							}
+							description = editedDescription
+						}
+
+						if confirm != "n" && confirm != "no" {
+							// Update ticket
+							if err := client.UpdateTicketDescription(ticket.Key, description); err != nil {
+								return false, err
+							}
+							return true, nil
+						}
+						// User declined to save
+						return false, nil
 					}
 					return false, nil // User skipped
 				}
@@ -301,9 +326,18 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 
 	// Process each step
 	for _, stepInfo := range steps {
-		// Check if step is already complete
+		// Check if step is already complete in status
 		if status.IsStepComplete(stepInfo.step) {
 			continue
+		}
+
+		// Check if step is already complete in ticket (for component step)
+		if stepInfo.step == StepComponent {
+			if len(ticket.Fields.Components) > 0 {
+				// Component already set, mark as complete and skip
+				status.MarkComplete(StepComponent)
+				continue
+			}
 		}
 
 		// Execute step with retry logic
