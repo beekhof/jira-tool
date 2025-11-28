@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/beekhof/jira-tool/pkg/gemini"
 )
@@ -13,6 +14,11 @@ import (
 // If maxQuestions is 0 or negative, defaults to 4
 // summaryOrKey is used to detect spikes (tickets with "SPIKE" prefix) and select the appropriate prompt template
 // existingDescription is included in the context if provided (for improving existing descriptions)
+//
+// Users can reject poor questions by entering "reject" or an empty string.
+// Rejected questions are skipped, a new question is generated, and the flow continues.
+// Rejected questions are added to history as "Q: [question] - REJECTED" for context.
+// Users can end the Q&A early by entering "skip" or "done".
 func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions int, summaryOrKey string, existingDescription string) (string, error) {
 	history := []string{}
 	reader := bufio.NewReader(os.Stdin)
@@ -49,14 +55,22 @@ func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions 
 		answer = trimSpace(answer)
 		question = trimSpace(question)
 
-		// Add to history
-		history = append(history, fmt.Sprintf("Q: %s", question))
-		history = append(history, fmt.Sprintf("A: %s", answer))
+		// Handle rejection (empty string or "reject")
+		if answer == "" || strings.EqualFold(answer, "reject") {
+			fmt.Println("Question rejected, generating a new one...")
+			history = append(history, fmt.Sprintf("Q: %s - REJECTED", question))
+			i-- // Decrement to retry without counting toward maxQuestions
+			continue
+		}
 
-		// If the answer is empty or user wants to skip, break early
-		if answer == "" || answer == "skip" || answer == "done" {
+		// Handle skip/done (end Q&A loop)
+		if answer == "skip" || answer == "done" {
 			break
 		}
+
+		// Normal answer - add to history
+		history = append(history, fmt.Sprintf("Q: %s", question))
+		history = append(history, fmt.Sprintf("A: %s", answer))
 	}
 
 	// Generate the final description
