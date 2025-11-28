@@ -16,8 +16,8 @@ import (
 
 // GeminiClient defines the interface for Gemini operations
 type GeminiClient interface {
-	GenerateQuestion(history []string, context string, issueType string) (string, error)
-	GenerateDescription(history []string, context string, issueType string) (string, error)
+	GenerateQuestion(history []string, context string, summaryOrKey string, issueTypeName string) (string, error)
+	GenerateDescription(history []string, context string, summaryOrKey string, issueTypeName string) (string, error)
 	EstimateStoryPoints(summary, description string, availablePoints []int) (int, string, error)
 }
 
@@ -26,10 +26,12 @@ type geminiClient struct {
 	apiKey                      string
 	baseURL                     string
 	client                      *http.Client
-	questionPromptTemplate      string
-	descriptionPromptTemplate   string
-	spikeQuestionPromptTemplate string
-	spikePromptTemplate         string
+	questionPromptTemplate         string
+	descriptionPromptTemplate      string
+	spikeQuestionPromptTemplate     string
+	spikePromptTemplate            string
+	epicFeatureQuestionPromptTemplate string
+	epicFeaturePromptTemplate      string
 }
 
 // ListModels lists available Gemini models
@@ -131,14 +133,26 @@ func NewClient(configDir string) (GeminiClient, error) {
 		spikeTemplate = getDefaultSpikePrompt()
 	}
 
+	epicFeatureQuestionTemplate := cfg.EpicFeatureQuestionPromptTemplate
+	if epicFeatureQuestionTemplate == "" {
+		epicFeatureQuestionTemplate = getDefaultEpicFeatureQuestionPrompt()
+	}
+
+	epicFeatureTemplate := cfg.EpicFeaturePromptTemplate
+	if epicFeatureTemplate == "" {
+		epicFeatureTemplate = getDefaultEpicFeaturePrompt()
+	}
+
 	return &geminiClient{
-		apiKey:                      apiKey,
-		baseURL:                     fmt.Sprintf("https://generativelanguage.googleapis.com/v1/models/%s:generateContent", modelName),
-		client:                      &http.Client{},
-		questionPromptTemplate:      questionTemplate,
-		descriptionPromptTemplate:   descriptionTemplate,
-		spikeQuestionPromptTemplate: spikeQuestionTemplate,
-		spikePromptTemplate:         spikeTemplate,
+		apiKey:                           apiKey,
+		baseURL:                          fmt.Sprintf("https://generativelanguage.googleapis.com/v1/models/%s:generateContent", modelName),
+		client:                           &http.Client{},
+		questionPromptTemplate:           questionTemplate,
+		descriptionPromptTemplate:        descriptionTemplate,
+		spikeQuestionPromptTemplate:      spikeQuestionTemplate,
+		spikePromptTemplate:              spikeTemplate,
+		epicFeatureQuestionPromptTemplate: epicFeatureQuestionTemplate,
+		epicFeaturePromptTemplate:        epicFeatureTemplate,
 	}, nil
 }
 
@@ -206,14 +220,46 @@ Write a concise and professional description that includes:
 Format it as plain text suitable for a Jira description field.`
 }
 
+// getDefaultEpicFeatureQuestionPrompt returns the default question generation prompt template for Epics and Features
+func getDefaultEpicFeatureQuestionPrompt() string {
+	return `You are helping to create a Jira Epic or Feature ticket. Based on the following context and conversation history, ask ONE clarifying question to better understand the high-level goals, business value, or scope of this Epic/Feature.
+
+Context: {{context}}
+
+{{history}}
+
+Ask only ONE clear, concise question that helps define the strategic direction, business objectives, or high-level scope. Focus on understanding the "why" and "what" at a high level, not implementation details.
+Do not include any preamble or explanation, just the question.`
+}
+
+// getDefaultEpicFeaturePrompt returns the default Epic/Feature description generation prompt template
+func getDefaultEpicFeaturePrompt() string {
+	return `You are helping to create a Jira Epic or Feature description. Based on the following context and conversation history, write a clear, comprehensive high-level description.
+
+Context: {{context}}
+
+{{history}}
+
+Write a concise and professional description that includes:
+- High-level goals and business objectives
+- Strategic value and why this Epic/Feature is important
+- High-level scope and boundaries
+- Success criteria or expected outcomes
+- Any relevant context or background
+
+Focus on the "what" and "why" at a strategic level, not implementation details. Format it as plain text suitable for a Jira description field.`
+}
+
 // GetDefaultTemplates returns all default prompt templates in a map
 // This is useful for displaying defaults or initializing config
 func GetDefaultTemplates() map[string]string {
 	return map[string]string{
-		"question_prompt_template":       getDefaultQuestionPrompt(),
-		"description_prompt_template":    getDefaultDescriptionPrompt(),
-		"spike_question_prompt_template": getDefaultSpikeQuestionPrompt(),
-		"spike_prompt_template":          getDefaultSpikePrompt(),
+		"question_prompt_template":              getDefaultQuestionPrompt(),
+		"description_prompt_template":           getDefaultDescriptionPrompt(),
+		"spike_question_prompt_template":       getDefaultSpikeQuestionPrompt(),
+		"spike_prompt_template":                getDefaultSpikePrompt(),
+		"epic_feature_question_prompt_template": getDefaultEpicFeatureQuestionPrompt(),
+		"epic_feature_prompt_template":         getDefaultEpicFeaturePrompt(),
 	}
 }
 
@@ -255,15 +301,15 @@ type ModelInfo struct {
 }
 
 // GenerateQuestion generates a clarifying question based on history and context
-func (c *geminiClient) GenerateQuestion(history []string, context string, issueType string) (string, error) {
-	prompt := c.buildQuestionPrompt(history, context, issueType)
+func (c *geminiClient) GenerateQuestion(history []string, context string, summaryOrKey string, issueTypeName string) (string, error) {
+	prompt := c.buildQuestionPrompt(history, context, summaryOrKey, issueTypeName)
 	return c.generateContent(prompt)
 }
 
 // GenerateDescription generates a description based on history and context
-// Uses spike prompt template if context indicates a spike (SPIKE prefix), otherwise uses normal template
-func (c *geminiClient) GenerateDescription(history []string, context string, issueType string) (string, error) {
-	prompt := c.buildDescriptionPrompt(history, context, issueType)
+// Uses appropriate prompt template based on issue type (Epic/Feature, Spike, or default)
+func (c *geminiClient) GenerateDescription(history []string, context string, summaryOrKey string, issueTypeName string) (string, error) {
+	prompt := c.buildDescriptionPrompt(history, context, summaryOrKey, issueTypeName)
 	return c.generateContent(prompt)
 }
 
@@ -345,8 +391,8 @@ This task involves moderate complexity with clear requirements and minimal risk.
 }
 
 // buildQuestionPrompt constructs the prompt for generating a question
-// Uses spike question template if the context indicates a spike (SPIKE prefix in summary/key)
-func (c *geminiClient) buildQuestionPrompt(history []string, context string, issueType string) string {
+// Uses appropriate template based on issue type: Epic/Feature > Spike > default
+func (c *geminiClient) buildQuestionPrompt(history []string, context string, summaryOrKey string, issueTypeName string) string {
 	// Build history section
 	historySection := ""
 	if len(history) > 0 {
@@ -358,18 +404,24 @@ func (c *geminiClient) buildQuestionPrompt(history []string, context string, iss
 		historySection = sb.String()
 	}
 
-	// Check if this is a spike based on context (summary) or issueType (which may be summary/key)
-	// The issueType parameter now contains the summary or key for spike detection
-	isSpike := IsSpike(context, "")
-	if !isSpike && issueType != "" {
-		// Check if the summary/key contains SPIKE
-		isSpike = IsSpike(issueType, "")
-	}
+	// Determine which template to use based on issue type
+	// Priority: Epic/Feature > Spike > default
+	var template string
+	if IsEpic(issueTypeName) || IsFeature(issueTypeName) {
+		template = c.epicFeatureQuestionPromptTemplate
+	} else {
+		// Check if this is a spike based on context (summary) or summaryOrKey
+		isSpike := IsSpike(context, "")
+		if !isSpike && summaryOrKey != "" {
+			// Check if the summary/key contains SPIKE
+			isSpike = IsSpike(summaryOrKey, "")
+		}
 
-	// Use spike question template for spikes, normal template for others
-	template := c.questionPromptTemplate
-	if isSpike {
-		template = c.spikeQuestionPromptTemplate
+		if isSpike {
+			template = c.spikeQuestionPromptTemplate
+		} else {
+			template = c.questionPromptTemplate
+		}
 	}
 
 	// Replace template placeholders
@@ -380,8 +432,8 @@ func (c *geminiClient) buildQuestionPrompt(history []string, context string, iss
 }
 
 // buildDescriptionPrompt constructs the prompt for generating a description
-// Uses spike prompt template if the context indicates a spike (SPIKE prefix in summary/key)
-func (c *geminiClient) buildDescriptionPrompt(history []string, context string, issueType string) string {
+// Uses appropriate template based on issue type: Epic/Feature > Spike > default
+func (c *geminiClient) buildDescriptionPrompt(history []string, context string, summaryOrKey string, issueTypeName string) string {
 	// Build history section
 	historySection := ""
 	if len(history) > 0 {
@@ -393,18 +445,24 @@ func (c *geminiClient) buildDescriptionPrompt(history []string, context string, 
 		historySection = sb.String()
 	}
 
-	// Check if this is a spike based on context (summary) or issueType (which may be summary/key)
-	// The issueType parameter now contains the summary or key for spike detection
-	isSpike := IsSpike(context, "")
-	if !isSpike && issueType != "" {
-		// Check if the summary/key contains SPIKE
-		isSpike = IsSpike(issueType, "")
-	}
+	// Determine which template to use based on issue type
+	// Priority: Epic/Feature > Spike > default
+	var template string
+	if IsEpic(issueTypeName) || IsFeature(issueTypeName) {
+		template = c.epicFeaturePromptTemplate
+	} else {
+		// Check if this is a spike based on context (summary) or summaryOrKey
+		isSpike := IsSpike(context, "")
+		if !isSpike && summaryOrKey != "" {
+			// Check if the summary/key contains SPIKE
+			isSpike = IsSpike(summaryOrKey, "")
+		}
 
-	// Use spike template for spikes, normal template for others
-	template := c.descriptionPromptTemplate
-	if isSpike {
-		template = c.spikePromptTemplate
+		if isSpike {
+			template = c.spikePromptTemplate
+		} else {
+			template = c.descriptionPromptTemplate
+		}
 	}
 
 	// Replace template placeholders

@@ -232,8 +232,9 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 					if response == "y" || response == "yes" {
 						// Get existing description
 						existingDesc, _ := client.GetTicketDescription(ticket.Key)
-						// Run Q&A flow
-						description, err := qa.RunQnAFlow(geminiClient, ticket.Fields.Summary, cfg.MaxQuestions, ticket.Fields.Summary, existingDesc)
+						// Run Q&A flow (pass issueTypeName for Epic/Feature detection)
+						issueTypeName := ticket.Fields.IssueType.Name
+						description, err := qa.RunQnAFlow(geminiClient, ticket.Fields.Summary, cfg.MaxQuestions, ticket.Fields.Summary, issueTypeName, existingDesc)
 						if err != nil {
 							return false, err
 						}

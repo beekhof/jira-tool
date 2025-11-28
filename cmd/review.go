@@ -531,16 +531,17 @@ func handleDetail(client jira.JiraClient, reader *bufio.Reader, ticketID, summar
 		return fmt.Errorf("ticket %s not found", ticketID)
 	}
 	ticketSummary := issues[0].Fields.Summary
+	issueTypeName := issues[0].Fields.IssueType.Name
 
 	geminiClient, err := gemini.NewClient(configDir)
 	if err != nil {
 		return err
 	}
 
-	// Run Q&A flow (pass summary to detect spike based on SPIKE prefix)
+	// Run Q&A flow (pass summary to detect spike based on SPIKE prefix, pass issueTypeName for Epic/Feature detection)
 	// Get existing description if available
 	existingDesc, _ := client.GetTicketDescription(ticketID)
-	description, err := qa.RunQnAFlow(geminiClient, summary, cfg.MaxQuestions, ticketSummary, existingDesc)
+	description, err := qa.RunQnAFlow(geminiClient, summary, cfg.MaxQuestions, ticketSummary, issueTypeName, existingDesc)
 	if err != nil {
 		return err
 	}

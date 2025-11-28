@@ -13,13 +13,14 @@ import (
 // It asks up to maxQuestions questions and then generates a final description
 // If maxQuestions is 0 or negative, defaults to 4
 // summaryOrKey is used to detect spikes (tickets with "SPIKE" prefix) and select the appropriate prompt template
+// issueTypeName is the Jira issue type name (e.g., "Epic", "Feature", "Task") used to select the appropriate prompt template
 // existingDescription is included in the context if provided (for improving existing descriptions)
 //
 // Users can reject poor questions by entering "reject" or an empty string.
 // Rejected questions are skipped, a new question is generated, and the flow continues.
 // Rejected questions are added to history as "Q: [question] - REJECTED" for context.
 // Users can end the Q&A early by entering "skip" or "done".
-func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions int, summaryOrKey string, existingDescription string) (string, error) {
+func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions int, summaryOrKey string, issueTypeName string, existingDescription string) (string, error) {
 	history := []string{}
 	reader := bufio.NewReader(os.Stdin)
 
@@ -37,7 +38,7 @@ func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions 
 	// Loop up to maxQuestions times
 	for i := 0; i < maxQuestions; i++ {
 		// Generate a question
-		question, err := client.GenerateQuestion(history, enhancedContext, summaryOrKey)
+		question, err := client.GenerateQuestion(history, enhancedContext, summaryOrKey, issueTypeName)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate question: %w", err)
 		}
@@ -74,7 +75,7 @@ func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions 
 	}
 
 	// Generate the final description
-	description, err := client.GenerateDescription(history, enhancedContext, summaryOrKey)
+	description, err := client.GenerateDescription(history, enhancedContext, summaryOrKey, issueTypeName)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate description: %w", err)
 	}

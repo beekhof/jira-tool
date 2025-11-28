@@ -19,6 +19,8 @@ type Config struct {
 	DescriptionPromptTemplate string `yaml:"description_prompt_template,omitempty"`
 	SpikeQuestionPromptTemplate string `yaml:"spike_question_prompt_template,omitempty"`
 	SpikePromptTemplate    string   `yaml:"spike_prompt_template,omitempty"`
+	EpicFeatureQuestionPromptTemplate string `yaml:"epic_feature_question_prompt_template,omitempty"`
+	EpicFeaturePromptTemplate string `yaml:"epic_feature_prompt_template,omitempty"`
 	ReviewPageSize         int      `yaml:"review_page_size,omitempty"`
 	StoryPointOptions      []int    `yaml:"story_point_options,omitempty"`
 	StoryPointsFieldID     string   `yaml:"story_points_field_id,omitempty"`
