@@ -27,7 +27,7 @@ with decomposed sub-tasks. The ticket will be transitioned to "Done" status.`,
 }
 
 func runAccept(cmd *cobra.Command, args []string) error {
-	ticketID := args[0]
+	ticketID := normalizeTicketID(args[0], cfg.DefaultProject)
 
 	configDir := GetConfigDir()
 	client, err := jira.NewClient(configDir, GetNoCache())

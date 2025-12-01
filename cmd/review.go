@@ -55,7 +55,7 @@ func runReview(cmd *cobra.Command, args []string) error {
 
 	// If a specific ticket ID is provided, fetch just that one
 	if len(args) == 1 {
-		ticketID := args[0]
+		ticketID := normalizeTicketID(args[0], cfg.DefaultProject)
 		jql := fmt.Sprintf("key = %s", ticketID)
 		jql = jira.ApplyTicketFilter(jql, filter)
 		issues, err = client.SearchTickets(jql)

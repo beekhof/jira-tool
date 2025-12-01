@@ -58,10 +58,11 @@ func runAssign(cmd *cobra.Command, args []string) error {
 
 	// If ticket ID provided, assign/unassign that single ticket
 	if len(args) == 1 {
+		ticketID := normalizeTicketID(args[0], cfg.DefaultProject)
 		if unassignFlag {
-			return unassignSingleTicket(client, args[0])
+			return unassignSingleTicket(client, ticketID)
 		}
-		return assignSingleTicket(client, cfg, args[0])
+		return assignSingleTicket(client, cfg, ticketID)
 	}
 
 	// Otherwise, show paginated list of tickets

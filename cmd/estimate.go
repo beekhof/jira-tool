@@ -51,7 +51,8 @@ func runEstimate(cmd *cobra.Command, args []string) error {
 
 	// If ticket ID provided, estimate that single ticket
 	if len(args) == 1 {
-		return estimateSingleTicket(client, cfg, args[0], storyPoints, configDir)
+		ticketID := normalizeTicketID(args[0], cfg.DefaultProject)
+		return estimateSingleTicket(client, cfg, ticketID, storyPoints, configDir)
 	}
 
 	// Otherwise, show paginated list of tickets without story points
