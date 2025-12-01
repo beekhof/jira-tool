@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/beekhof/jira-tool/pkg/config"
@@ -555,6 +556,10 @@ func (c *geminiClient) generateContentOnce(prompt string) (string, error) {
 
 	req.Header.Set("Content-Type", "application/json")
 
+	// Show thinking indicator while waiting for response
+	stopThinking := showThinkingIndicator()
+	defer stopThinking()
+
 	// Execute the request
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -615,4 +620,34 @@ func (c *geminiClient) generateContentOnce(prompt string) (string, error) {
 	}
 
 	return geminiResp.Candidates[0].Content.Parts[0].Text, nil
+}
+
+// showThinkingIndicator displays "Thinking..." and appends a dot every second
+// Returns a function to stop the indicator
+func showThinkingIndicator() func() {
+	var wg sync.WaitGroup
+	stop := make(chan bool, 1)
+	
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		fmt.Fprint(os.Stderr, "Thinking...")
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		
+		for {
+			select {
+			case <-ticker.C:
+				fmt.Fprint(os.Stderr, ".")
+			case <-stop:
+				fmt.Fprint(os.Stderr, "\n")
+				return
+			}
+		}
+	}()
+	
+	return func() {
+		stop <- true
+		wg.Wait()
+	}
 }
