@@ -172,7 +172,7 @@ func runAccept(cmd *cobra.Command, args []string) error {
 	// Note: ticketID is the source ticket, not the new Epic, so we don't pass it for child ticket lookup
 	answerInputMethod := cfg.AnswerInputMethod
 	if answerInputMethod == "" {
-		answerInputMethod = "readline_with_preview"
+		answerInputMethod = "readline"
 	}
 	plan, err := qa.RunQnAFlow(geminiClient, context, cfg.MaxQuestions, spikeIdentifier, "Epic", "", nil, "", "", answerInputMethod)
 	if err != nil {

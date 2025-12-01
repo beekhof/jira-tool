@@ -31,7 +31,7 @@ type Config struct {
 	DefaultBoardID         int      `yaml:"default_board_id,omitempty"`         // Default board ID if auto-detection fails (default: 0)
 	EpicLinkFieldID        string   `yaml:"epic_link_field_id,omitempty"`       // Epic Link custom field ID (auto-detected or manually configured)
 	TicketFilter           string   `yaml:"ticket_filter,omitempty"`            // JQL filter to append to all ticket queries (e.g., "assignee = currentUser()")
-	AnswerInputMethod      string   `yaml:"answer_input_method,omitempty"`      // Answer input method: "readline", "editor", or "readline_with_preview" (default: "readline_with_preview")
+	AnswerInputMethod      string   `yaml:"answer_input_method,omitempty"`      // Answer input method: "readline", "editor", or "readline_with_preview" (default: "readline")
 }
 
 // GetConfigPath returns the path for the config file

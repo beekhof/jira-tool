@@ -348,6 +348,40 @@ func runInit(cmd *cobra.Command, args []string) error {
 		cfg.DefaultBoardID = existingCfg.DefaultBoardID
 	}
 
+	// Prompt for answer input method
+	prompt = "Answer input method [readline/editor/readline_with_preview]"
+	if existingCfg != nil && existingCfg.AnswerInputMethod != "" {
+		prompt = fmt.Sprintf("%s [%s]", prompt, existingCfg.AnswerInputMethod)
+	}
+	fmt.Printf("\n%s: ", prompt)
+	answerInputMethodInput, err := reader.ReadString('\n')
+	if err == nil {
+		answerInputMethodInput = strings.TrimSpace(answerInputMethodInput)
+		if answerInputMethodInput != "" {
+			// Validate input
+			validMethods := map[string]bool{
+				"readline":              true,
+				"editor":                true,
+				"readline_with_preview": true,
+			}
+			if validMethods[strings.ToLower(answerInputMethodInput)] {
+				cfg.AnswerInputMethod = strings.ToLower(answerInputMethodInput)
+			} else if existingCfg != nil && existingCfg.AnswerInputMethod != "" {
+				cfg.AnswerInputMethod = existingCfg.AnswerInputMethod
+			} else {
+				cfg.AnswerInputMethod = "readline" // Default
+			}
+		} else if existingCfg != nil && existingCfg.AnswerInputMethod != "" {
+			cfg.AnswerInputMethod = existingCfg.AnswerInputMethod
+		} else {
+			cfg.AnswerInputMethod = "readline" // Default
+		}
+	} else if existingCfg != nil && existingCfg.AnswerInputMethod != "" {
+		cfg.AnswerInputMethod = existingCfg.AnswerInputMethod
+	} else {
+		cfg.AnswerInputMethod = "readline" // Default
+	}
+
 	// Prompt for ticket filter
 	fmt.Print("\nTicket filter (JQL to append to all ticket queries, optional, press Enter to skip): ")
 	filterInput, err := reader.ReadString('\n')
