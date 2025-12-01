@@ -211,8 +211,16 @@ func HandleSeverityStep(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 		return true, nil // Not configured, skip step
 	}
 
-	// Check if severity is already set (would need to check custom field)
-	// For now, assume we need to set it
+	// Check if severity is already set by fetching raw ticket data
+	rawTicket, err := client.GetTicketRaw(ticket.Key)
+	if err == nil {
+		if fields, ok := rawTicket["fields"].(map[string]interface{}); ok {
+			if severityValue, ok := fields[cfg.SeverityFieldID]; ok && severityValue != nil {
+				// Severity is already set, skip step
+				return true, nil
+			}
+		}
+	}
 
 	// Fetch severity values
 	values, err := client.GetSeverityFieldValues(cfg.SeverityFieldID)
@@ -221,8 +229,23 @@ func HandleSeverityStep(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 	}
 
 	if len(values) == 0 {
-		// No predefined values, skip
-		return true, nil
+		// No predefined values available - severity field may not have a fixed set of values
+		// Still show the step but inform user that severity field is configured but has no predefined values
+		fmt.Println("Severity field is configured but has no predefined values.")
+		fmt.Print("Set severity? [y/N] ")
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			return false, err
+		}
+		response = strings.TrimSpace(strings.ToLower(response))
+		if response != "y" && response != "yes" {
+			return false, nil // User skipped
+		}
+		// TODO: Implement UpdateTicketSeverity to set custom severity value
+		// For now, inform user that this feature is not yet implemented
+		fmt.Println("Note: Setting custom severity values is not yet implemented.")
+		fmt.Println("You may need to set the severity manually in Jira.")
+		return false, nil // Mark as incomplete since we can't actually set it
 	}
 
 	fmt.Println("Select severity:")
