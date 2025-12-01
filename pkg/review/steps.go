@@ -216,8 +216,21 @@ func HandleSeverityStep(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 	if err == nil {
 		if fields, ok := rawTicket["fields"].(map[string]interface{}); ok {
 			if severityValue, ok := fields[cfg.SeverityFieldID]; ok && severityValue != nil {
-				// Severity is already set, skip step
-				return true, nil
+				// Check if it's a value object (map) or direct string
+				var currentValue string
+				if severityMap, ok := severityValue.(map[string]interface{}); ok {
+					if val, ok := severityMap["value"].(string); ok {
+						currentValue = val
+					} else if val, ok := severityMap["name"].(string); ok {
+						currentValue = val
+					}
+				} else if val, ok := severityValue.(string); ok {
+					currentValue = val
+				}
+				if currentValue != "" {
+					// Severity is already set, skip step
+					return true, nil
+				}
 			}
 		}
 	}
