@@ -23,15 +23,15 @@ type GeminiClient interface {
 
 // geminiClient is the concrete implementation of GeminiClient
 type geminiClient struct {
-	apiKey                      string
-	baseURL                     string
-	client                      *http.Client
-	questionPromptTemplate         string
-	descriptionPromptTemplate      string
-	spikeQuestionPromptTemplate     string
-	spikePromptTemplate            string
+	apiKey                            string
+	baseURL                           string
+	client                            *http.Client
+	questionPromptTemplate            string
+	descriptionPromptTemplate         string
+	spikeQuestionPromptTemplate       string
+	spikePromptTemplate               string
 	epicFeatureQuestionPromptTemplate string
-	epicFeaturePromptTemplate      string
+	epicFeaturePromptTemplate         string
 }
 
 // ListModels lists available Gemini models
@@ -144,15 +144,15 @@ func NewClient(configDir string) (GeminiClient, error) {
 	}
 
 	return &geminiClient{
-		apiKey:                           apiKey,
-		baseURL:                          fmt.Sprintf("https://generativelanguage.googleapis.com/v1/models/%s:generateContent", modelName),
-		client:                           &http.Client{},
-		questionPromptTemplate:           questionTemplate,
-		descriptionPromptTemplate:        descriptionTemplate,
-		spikeQuestionPromptTemplate:      spikeQuestionTemplate,
-		spikePromptTemplate:              spikeTemplate,
+		apiKey:                            apiKey,
+		baseURL:                           fmt.Sprintf("https://generativelanguage.googleapis.com/v1/models/%s:generateContent", modelName),
+		client:                            &http.Client{},
+		questionPromptTemplate:            questionTemplate,
+		descriptionPromptTemplate:         descriptionTemplate,
+		spikeQuestionPromptTemplate:       spikeQuestionTemplate,
+		spikePromptTemplate:               spikeTemplate,
 		epicFeatureQuestionPromptTemplate: epicFeatureQuestionTemplate,
-		epicFeaturePromptTemplate:        epicFeatureTemplate,
+		epicFeaturePromptTemplate:         epicFeatureTemplate,
 	}, nil
 }
 
@@ -228,26 +228,31 @@ Context: {{context}}
 
 {{history}}
 
-Ask only ONE clear, concise question that helps define the strategic direction, business objectives, or high-level scope. Focus on understanding the "why" and "what" at a high level, not implementation details.
+Ask only ONE clear, concise question that helps define the strategic direction, business objectives, or high-level scope. Focus on understanding the "why" and "what" at a high level, not technical implementation details.
 Do not include any preamble or explanation, just the question.`
 }
 
 // getDefaultEpicFeaturePrompt returns the default Epic/Feature description generation prompt template
 func getDefaultEpicFeaturePrompt() string {
-	return `You are helping to create a Jira Epic or Feature description. Based on the following context and conversation history, write a clear, comprehensive high-level description.
+	return `You are helping to create a Jira Epic or Feature description. 
+Based on the following context and conversation history, write a clear and concise high-level description formated as plain text suitable for a Jira description field.
+
+Focus on the "what" and "why" at a strategic level, not implementation details.
+Use headings and bullet points to make the information scannable and digestible.
+
+Start with a summary which should be readable and easily understood by a diverse audience, including developers, QA, product owners, and non-technical stakeholders. Avoid excessive technical implementation details.
+
+Explain the business value of the work and why it is important.
+
+Then define the high-level scope, including the major deliverables and, crucially, any high-level constraints on the work, or what is explicitly out of scope. 
+
+Finally, define the success criteria or expected outcomes, and include any relevant context or background.
+
 
 Context: {{context}}
 
 {{history}}
-
-Write a concise and professional description that includes:
-- High-level goals and business objectives
-- Strategic value and why this Epic/Feature is important
-- High-level scope and boundaries
-- Success criteria or expected outcomes
-- Any relevant context or background
-
-Focus on the "what" and "why" at a strategic level, not implementation details. Format it as plain text suitable for a Jira description field.`
+`
 }
 
 // GetDefaultTemplates returns all default prompt templates in a map
@@ -256,10 +261,10 @@ func GetDefaultTemplates() map[string]string {
 	return map[string]string{
 		"question_prompt_template":              getDefaultQuestionPrompt(),
 		"description_prompt_template":           getDefaultDescriptionPrompt(),
-		"spike_question_prompt_template":       getDefaultSpikeQuestionPrompt(),
-		"spike_prompt_template":                getDefaultSpikePrompt(),
+		"spike_question_prompt_template":        getDefaultSpikeQuestionPrompt(),
+		"spike_prompt_template":                 getDefaultSpikePrompt(),
 		"epic_feature_question_prompt_template": getDefaultEpicFeatureQuestionPrompt(),
-		"epic_feature_prompt_template":         getDefaultEpicFeaturePrompt(),
+		"epic_feature_prompt_template":          getDefaultEpicFeaturePrompt(),
 	}
 }
 

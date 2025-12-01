@@ -112,3 +112,48 @@ func FilterValidParentTickets(client JiraClient, ticketKeys []string) ([]string,
 	return validTickets, nil
 }
 
+// GetChildTickets retrieves all child tickets (subtasks and epic children) for a given ticket
+// Returns a list of ticket summaries
+func GetChildTickets(client JiraClient, ticketKey string, epicLinkFieldID string) ([]string, error) {
+	var childSummaries []string
+
+	// Get the ticket to check if it's an Epic
+	issue, err := client.GetIssue(ticketKey)
+	if err != nil {
+		// If we can't get the ticket, return empty list (not an error)
+		return childSummaries, nil
+	}
+
+	// Get subtasks (for any ticket type)
+	subtasks, err := client.SearchTickets(fmt.Sprintf("parent = %s", ticketKey))
+	if err == nil {
+		for _, subtask := range subtasks {
+			childSummaries = append(childSummaries, subtask.Fields.Summary)
+		}
+	}
+
+	// If it's an Epic, also get tickets linked via Epic Link
+	if IsEpic(issue) && epicLinkFieldID != "" {
+		// Search for tickets with this Epic Link
+		epicChildren, err := client.SearchTickets(fmt.Sprintf("%s = %s", epicLinkFieldID, ticketKey))
+		if err == nil {
+			for _, child := range epicChildren {
+				// Avoid duplicates (in case a ticket is both a subtask and epic child)
+				summary := child.Fields.Summary
+				isDuplicate := false
+				for _, existing := range childSummaries {
+					if existing == summary {
+						isDuplicate = true
+						break
+					}
+				}
+				if !isDuplicate {
+					childSummaries = append(childSummaries, summary)
+				}
+			}
+		}
+	}
+
+	return childSummaries, nil
+}
+

@@ -223,8 +223,8 @@ func runCreate(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		// Run Q&A flow (pass summary to detect spike based on SPIKE prefix, pass taskType as issueTypeName, no existing description for new tickets)
-		description, err := qa.RunQnAFlow(geminiClient, summary, cfg.MaxQuestions, summary, taskType, "")
+		// Run Q&A flow (pass summary to detect spike based on SPIKE prefix, pass taskType as issueTypeName, no existing description for new tickets, include child tickets in context)
+		description, err := qa.RunQnAFlow(geminiClient, summary, cfg.MaxQuestions, summary, taskType, "", client, ticketKey, cfg.EpicLinkFieldID)
 		if err != nil {
 			return err
 		}

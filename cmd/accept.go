@@ -169,7 +169,8 @@ func runAccept(cmd *cobra.Command, args []string) error {
 	}
 	// No existing description for epic plan generation
 	// Pass "Epic" as issueTypeName since we're creating an Epic
-	plan, err := qa.RunQnAFlow(geminiClient, context, cfg.MaxQuestions, spikeIdentifier, "Epic", "")
+	// Note: ticketID is the source ticket, not the new Epic, so we don't pass it for child ticket lookup
+	plan, err := qa.RunQnAFlow(geminiClient, context, cfg.MaxQuestions, spikeIdentifier, "Epic", "", nil, "", "")
 	if err != nil {
 		return err
 	}

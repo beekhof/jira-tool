@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/beekhof/jira-tool/pkg/gemini"
+	"github.com/beekhof/jira-tool/pkg/jira"
 )
 
 // RunQnAFlow runs the interactive Q&A flow with Gemini
@@ -15,12 +16,14 @@ import (
 // summaryOrKey is used to detect spikes (tickets with "SPIKE" prefix) and select the appropriate prompt template
 // issueTypeName is the Jira issue type name (e.g., "Epic", "Feature", "Task") used to select the appropriate prompt template
 // existingDescription is included in the context if provided (for improving existing descriptions)
+// jiraClient and ticketKey are optional - if provided, child ticket summaries will be included in context
+// epicLinkFieldID is optional - required for Epic tickets to fetch epic children
 //
 // Users can reject poor questions by entering "reject" or an empty string.
 // Rejected questions are skipped, a new question is generated, and the flow continues.
 // Rejected questions are added to history as "Q: [question] - REJECTED" for context.
 // Users can end the Q&A early by entering "skip" or "done".
-func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions int, summaryOrKey string, issueTypeName string, existingDescription string) (string, error) {
+func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions int, summaryOrKey string, issueTypeName string, existingDescription string, jiraClient jira.JiraClient, ticketKey string, epicLinkFieldID string) (string, error) {
 	history := []string{}
 	reader := bufio.NewReader(os.Stdin)
 
@@ -28,6 +31,26 @@ func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions 
 	enhancedContext := initialContext
 	if existingDescription != "" {
 		enhancedContext = fmt.Sprintf("%s\n\nExisting description: %s\n\nImprove or expand this description based on the following questions:", initialContext, existingDescription)
+	}
+
+	// Include child ticket summaries in context if available
+	if jiraClient != nil && ticketKey != "" {
+		childSummaries, err := jira.GetChildTickets(jiraClient, ticketKey, epicLinkFieldID)
+		if err == nil && len(childSummaries) > 0 {
+			childContext := "\n\nChild tickets:\n"
+			for i, summary := range childSummaries {
+				childContext += fmt.Sprintf("- %s\n", summary)
+				// Limit to first 20 child tickets to avoid overwhelming context
+				if i >= 19 {
+					remaining := len(childSummaries) - 20
+					if remaining > 0 {
+						childContext += fmt.Sprintf("... and %d more child tickets\n", remaining)
+					}
+					break
+				}
+			}
+			enhancedContext += childContext
+		}
 	}
 
 	// Default to 4 if not specified
