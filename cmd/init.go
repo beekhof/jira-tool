@@ -219,6 +219,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		cfg.SeverityFieldID = existingCfg.SeverityFieldID
 		cfg.SeverityValues = existingCfg.SeverityValues
 		cfg.DefaultBoardID = existingCfg.DefaultBoardID
+		cfg.AnswerInputMethod = existingCfg.AnswerInputMethod
 	}
 
 	// Set defaults if no existing config

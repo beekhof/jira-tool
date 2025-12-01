@@ -26,9 +26,9 @@ func ReadAnswerWithReadline(prompt string, method string) (string, error) {
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:          prompt,
 		HistoryFile:     "", // No history file
-		AutoComplete:   nil,
+		AutoComplete:    nil,
 		InterruptPrompt: "^C",
-		EOFPrompt:      "exit",
+		EOFPrompt:       "exit",
 	})
 	if err != nil {
 		// Fallback to standard input
@@ -147,4 +147,3 @@ func readAnswerStandard(prompt string) (string, error) {
 	}
 	return strings.TrimSpace(line), nil
 }
-

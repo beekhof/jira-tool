@@ -283,7 +283,7 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 						issueTypeName := ticket.Fields.IssueType.Name
 						answerInputMethod := cfg.AnswerInputMethod
 						if answerInputMethod == "" {
-							answerInputMethod = "readline_with_preview"
+							answerInputMethod = "readline"
 						}
 						description, err := qa.RunQnAFlow(geminiClient, ticket.Fields.Summary, cfg.MaxQuestions, ticket.Fields.Summary, issueTypeName, existingDesc, client, ticket.Key, cfg.EpicLinkFieldID, answerInputMethod)
 						if err != nil {

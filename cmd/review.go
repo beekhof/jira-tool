@@ -543,7 +543,7 @@ func handleDetail(client jira.JiraClient, reader *bufio.Reader, ticketID, summar
 	existingDesc, _ := client.GetTicketDescription(ticketID)
 	answerInputMethod := cfg.AnswerInputMethod
 	if answerInputMethod == "" {
-		answerInputMethod = "readline_with_preview"
+		answerInputMethod = "readline"
 	}
 	description, err := qa.RunQnAFlow(geminiClient, summary, cfg.MaxQuestions, ticketSummary, issueTypeName, existingDesc, client, ticketID, cfg.EpicLinkFieldID, answerInputMethod)
 	if err != nil {
