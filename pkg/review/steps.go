@@ -278,10 +278,13 @@ func HandleSeverityStep(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 		return false, fmt.Errorf("invalid selection: %d", selected)
 	}
 
-	// Update ticket severity (would need UpdateTicketSeverity method)
-	// For now, placeholder
-	_ = values[selected-1]
+	// Update ticket severity
+	selectedValue := values[selected-1]
+	if err := client.UpdateTicketSeverity(ticket.Key, cfg.SeverityFieldID, selectedValue); err != nil {
+		return false, fmt.Errorf("failed to update severity: %w", err)
+	}
 
+	fmt.Printf("Severity set to: %s\n", selectedValue)
 	return true, nil
 }
 

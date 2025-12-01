@@ -45,6 +45,7 @@ type JiraClient interface {
 	UpdateTicketComponents(ticketID string, componentIDs []string) error
 	DetectSeverityField(projectKey string) (string, error)
 	GetSeverityFieldValues(fieldID string) ([]string, error)
+	UpdateTicketSeverity(ticketID, severityFieldID, severityValue string) error
 	GetBoardsForProject(projectKey string) ([]Board, error)
 	DetectEpicLinkField(projectKey string) (string, error)
 }
