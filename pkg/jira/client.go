@@ -1022,7 +1022,7 @@ func (c *jiraClient) GetIssue(issueKey string) (*Issue, error) {
 func (c *jiraClient) searchIssues(jql string) ([]Issue, error) {
 	endpoint, err := buildURL(c.baseURL, "/rest/api/2/search", map[string]string{
 		"jql":        jql,
-		"fields":     "summary,status,issuetype,priority,assignee,customfield_10016",
+		"fields":     "summary,status,issuetype,priority,assignee,customfield_10016,components",
 		"maxResults": "1000",
 	})
 	if err != nil {
