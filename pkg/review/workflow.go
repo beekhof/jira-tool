@@ -138,9 +138,28 @@ func InitializeStatusFromTicket(client jira.JiraClient, ticket jira.Issue, cfg *
 
 	// Check Severity (only if configured)
 	if cfg.SeverityFieldID != "" {
-		// We can't easily check severity without fetching the ticket with that field
-		// For now, assume incomplete if field is configured (will be checked in step handler)
-		// This is a limitation - we'd need to fetch the ticket with severity field to check
+		rawTicket, err := client.GetTicketRaw(ticket.Key)
+		if err == nil {
+			if fields, ok := rawTicket["fields"].(map[string]interface{}); ok {
+				if severityValue, ok := fields[cfg.SeverityFieldID]; ok && severityValue != nil {
+					// Check if it's a value object (map) or direct string
+					var currentValue string
+					if severityMap, ok := severityValue.(map[string]interface{}); ok {
+						if val, ok := severityMap["value"].(string); ok {
+							currentValue = val
+						} else if val, ok := severityMap["name"].(string); ok {
+							currentValue = val
+						}
+					} else if val, ok := severityValue.(string); ok {
+						currentValue = val
+					}
+					if currentValue != "" {
+						// Severity is already set
+						status.SeverityComplete = true
+					}
+				}
+			}
+		}
 	}
 
 	// Check Story Points
