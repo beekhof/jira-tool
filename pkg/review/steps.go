@@ -484,6 +484,7 @@ func HandleStoryPointsStep(client jira.JiraClient, geminiClient gemini.GeminiCli
 
 	// Get AI suggestion
 	options := []int{1, 2, 3, 5, 8, 13}
+	var aiReasoning string
 	estimate, reasoning, err := geminiClient.EstimateStoryPoints(ticket.Fields.Summary, description, options)
 	if err != nil {
 		// If AI fails, continue with manual selection
@@ -491,6 +492,7 @@ func HandleStoryPointsStep(client jira.JiraClient, geminiClient gemini.GeminiCli
 	} else {
 		fmt.Printf("🤖 AI Estimate: %d story points\n", estimate)
 		fmt.Printf("   Reasoning: %s\n", reasoning)
+		aiReasoning = reasoning // Store for later use
 	}
 
 	fmt.Println("\nSelect story points:")
@@ -517,8 +519,17 @@ func HandleStoryPointsStep(client jira.JiraClient, geminiClient gemini.GeminiCli
 	if len(input) == 1 {
 		for i, letter := range letters {
 			if input == letter && i < len(options) {
-				if err := client.UpdateTicketPoints(ticket.Key, options[i]); err != nil {
+				points := options[i]
+				if err := client.UpdateTicketPoints(ticket.Key, points); err != nil {
 					return false, err
+				}
+				// Add AI reasoning as comment if available
+				if aiReasoning != "" {
+					comment := fmt.Sprintf("🤖 *AI Story Point Estimate: %d points*\n\n%s", points, aiReasoning)
+					if err := client.AddComment(ticket.Key, comment); err != nil {
+						// Log but don't fail - comment is optional
+						fmt.Printf("Warning: Could not add reasoning comment: %v\n", err)
+					}
 				}
 				return true, nil
 			}
@@ -530,6 +541,14 @@ func HandleStoryPointsStep(client jira.JiraClient, geminiClient gemini.GeminiCli
 	if err == nil {
 		if err := client.UpdateTicketPoints(ticket.Key, points); err != nil {
 			return false, err
+		}
+		// Add AI reasoning as comment if available
+		if aiReasoning != "" {
+			comment := fmt.Sprintf("🤖 *AI Story Point Estimate: %d points*\n\n%s", points, aiReasoning)
+			if err := client.AddComment(ticket.Key, comment); err != nil {
+				// Log but don't fail - comment is optional
+				fmt.Printf("Warning: Could not add reasoning comment: %v\n", err)
+			}
 		}
 		return true, nil
 	}

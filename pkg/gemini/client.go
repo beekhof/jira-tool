@@ -627,14 +627,14 @@ func (c *geminiClient) generateContentOnce(prompt string) (string, error) {
 func showThinkingIndicator() func() {
 	var wg sync.WaitGroup
 	stop := make(chan bool, 1)
-	
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		fmt.Fprint(os.Stderr, "Thinking...")
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
-		
+
 		for {
 			select {
 			case <-ticker.C:
@@ -645,7 +645,7 @@ func showThinkingIndicator() func() {
 			}
 		}
 	}()
-	
+
 	return func() {
 		stop <- true
 		wg.Wait()

@@ -32,6 +32,7 @@ type JiraClient interface {
 	GetTicketDescription(ticketID string) (string, error)
 	GetTicketAttachments(ticketID string) ([]Attachment, error)
 	GetTicketComments(ticketID string) ([]Comment, error)
+	AddComment(ticketID, comment string) error
 	GetTransitions(ticketID string) ([]Transition, error)
 	AddIssuesToSprint(sprintID int, issueKeys []string) error
 	AddIssuesToRelease(releaseID string, issueKeys []string) error
@@ -805,6 +806,48 @@ func (c *jiraClient) GetTicketComments(ticketID string) ([]Comment, error) {
 	}
 
 	return commentResp.Comments, nil
+}
+
+// AddComment adds a comment to a ticket
+func (c *jiraClient) AddComment(ticketID, comment string) error {
+	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s/comment", c.baseURL, ticketID)
+
+	// Construct the JSON payload
+	payload := map[string]interface{}{
+		"body": comment,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	c.setAuth(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			return fmt.Errorf("authentication failed. Your Jira token may be invalid. Please run 'jira init'")
+		}
+		if resp.StatusCode == 404 {
+			return fmt.Errorf("ticket %s not found", ticketID)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, string(body))
+	}
+
+	return nil
 }
 
 // AddIssuesToSprint adds issues to a sprint
