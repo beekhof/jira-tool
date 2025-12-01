@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/beekhof/jira-tool/pkg/config"
 	"github.com/spf13/cobra"
@@ -61,6 +62,24 @@ func GetTicketFilter(cfg *config.Config) string {
 	}
 	// No filter set
 	return ""
+}
+
+// normalizeTicketID prepends the default project if the ticket ID doesn't have a project prefix
+// Example: "353" with default project "OCPNAS" becomes "OCPNAS-353"
+// Example: "OCPNAS-353" remains "OCPNAS-353"
+func normalizeTicketID(ticketID, defaultProject string) string {
+	// If ticket ID already contains a dash, it has a project prefix
+	if strings.Contains(ticketID, "-") {
+		return ticketID
+	}
+
+	// If no default project configured, return as-is
+	if defaultProject == "" {
+		return ticketID
+	}
+
+	// Prepend default project
+	return defaultProject + "-" + ticketID
 }
 
 func init() {
