@@ -116,6 +116,51 @@ func (ts *TicketStatus) MarkComplete(step WorkflowStep) {
 	}
 }
 
+// InitializeStatusFromTicket creates a TicketStatus based on the current ticket state
+func InitializeStatusFromTicket(client jira.JiraClient, ticket jira.Issue, cfg *config.Config) TicketStatus {
+	status := TicketStatus{}
+
+	// Check Description
+	isValid, _, err := CheckDescriptionQuality(client, ticket, cfg)
+	if err == nil && isValid {
+		status.DescriptionComplete = true
+	}
+
+	// Check Component
+	if len(ticket.Fields.Components) > 0 {
+		status.ComponentComplete = true
+	}
+
+	// Check Priority
+	if ticket.Fields.Priority.Name != "" {
+		status.PriorityComplete = true
+	}
+
+	// Check Severity (only if configured)
+	if cfg.SeverityFieldID != "" {
+		// We can't easily check severity without fetching the ticket with that field
+		// For now, assume incomplete if field is configured (will be checked in step handler)
+		// This is a limitation - we'd need to fetch the ticket with severity field to check
+	}
+
+	// Check Story Points
+	if ticket.Fields.StoryPoints > 0 {
+		status.StoryPointsComplete = true
+	}
+
+	// Check Backlog State (not in "New" state means already transitioned)
+	if ticket.Fields.Status.Name != "New" {
+		status.BacklogComplete = true
+	}
+
+	// Check Assignment
+	if ticket.Fields.Assignee.DisplayName != "" || ticket.Fields.Assignee.AccountID != "" || ticket.Fields.Assignee.Name != "" {
+		status.AssignmentComplete = true
+	}
+
+	return status
+}
+
 // DisplayProgress shows a progress checklist for the ticket
 func DisplayProgress(ticket jira.Issue, status TicketStatus) {
 	fmt.Printf("\nReviewing: %s - %s\n\n", ticket.Key, ticket.Fields.Summary)
@@ -202,11 +247,11 @@ func HandleWorkflowError(err error, step WorkflowStep, reader *bufio.Reader) (Ac
 
 // ProcessTicketWorkflow processes a single ticket through the guided review workflow
 func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiClient, reader *bufio.Reader, cfg *config.Config, ticket jira.Issue, configDir string) error {
-	// Initialize status
-	status := &TicketStatus{}
+	// Initialize status based on current ticket state
+	status := InitializeStatusFromTicket(client, ticket, cfg)
 
 	// Display initial progress
-	DisplayProgress(ticket, *status)
+	DisplayProgress(ticket, status)
 
 	// Process each step in order
 	steps := []struct {
