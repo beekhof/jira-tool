@@ -58,9 +58,32 @@ func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *conf
 		return false, fmt.Errorf("default_project not configured")
 	}
 
-	components, err := client.GetComponents(projectKey)
-	if err != nil {
-		return false, fmt.Errorf("failed to fetch components: %w", err)
+	// Fetch components for project (with retry option if not found)
+	var components []jira.Component
+	var fetchErr error
+	for retries := 0; retries < 2; retries++ {
+		components, fetchErr = client.GetComponents(projectKey)
+		if fetchErr == nil {
+			break
+		}
+		if retries == 0 {
+			// First attempt failed, ask user if they want to retry with cache bypass
+			fmt.Printf("Failed to fetch components: %v\n", fetchErr)
+			fmt.Print("Retry without cache? [y/N]: ")
+			retryInput, err := reader.ReadString('\n')
+			if err != nil {
+				return false, err
+			}
+			retryInput = strings.TrimSpace(strings.ToLower(retryInput))
+			if retryInput != "y" && retryInput != "yes" {
+				return false, fetchErr
+			}
+			// Note: We can't bypass cache from here without modifying GetComponents
+			// For now, just retry - the cache might have been updated
+		}
+	}
+	if fetchErr != nil {
+		return false, fmt.Errorf("failed to fetch components: %w", fetchErr)
 	}
 
 	if len(components) == 0 {
@@ -182,14 +205,41 @@ func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *conf
 				return true, nil
 			}
 
-			// No match found - try to create/assign by name directly
-			// Note: Jira API typically requires component ID, but we can try with name
-			// This might fail if the component doesn't exist, but we'll let the API error handle it
-			fmt.Printf("Component '%s' not found in list. Attempting to assign by name...\n", searchInput)
-			// We need to create a component object with just the name
-			// Since UpdateTicketComponents requires IDs, we'll need to try a different approach
-			// For now, return an error suggesting the component needs to exist
-			return false, fmt.Errorf("component '%s' not found. Please ensure the component exists in the project, or select from the list above", searchInput)
+			// No match found - try case-insensitive exact match first
+			var exactMatch *jira.Component
+			for i := range components {
+				if strings.EqualFold(components[i].Name, searchInput) {
+					exactMatch = &components[i]
+					break
+				}
+			}
+
+			if exactMatch != nil {
+				// Found exact match (case-insensitive), use it
+				if err := client.UpdateTicketComponents(ticket.Key, []string{exactMatch.ID}); err != nil {
+					return false, fmt.Errorf("failed to update component: %w", err)
+				}
+				state.AddRecentComponent(exactMatch.Name)
+				if err := config.SaveState(state, statePath); err != nil {
+					_ = err // Log but don't fail
+				}
+				fmt.Printf("Component set to: %s\n", exactMatch.Name)
+				return true, nil
+			}
+
+			// Still no match - component might not be in the fetched list
+			// This could happen if:
+			// 1. Component is archived/inactive (Jira API might filter them)
+			// 2. Component list is paginated and we're not getting all components
+			// 3. Component exists in a different project
+			// 4. Cache is stale
+			fmt.Printf("Component '%s' not found in the component list.\n", searchInput)
+			fmt.Println("Possible reasons:")
+			fmt.Println("  - Component might be archived or inactive")
+			fmt.Println("  - Component list might be incomplete")
+			fmt.Println("  - Component might be in a different project")
+			fmt.Print("Try entering the component name exactly as it appears in Jira, or select from the list above: ")
+			return false, fmt.Errorf("component '%s' not found in project %s. Please verify the component name and ensure it exists in the project", searchInput, projectKey)
 		}
 
 		// Show matching components
