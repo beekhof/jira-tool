@@ -222,10 +222,15 @@ func HandleSeverityStep(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 		}
 	}
 
-	// Fetch severity values
+	// Fetch severity values from Jira API
 	values, err := client.GetSeverityFieldValues(cfg.SeverityFieldID)
 	if err != nil {
 		return false, fmt.Errorf("failed to fetch severity values: %w", err)
+	}
+
+	// If API doesn't return values, use configured values from config.yaml
+	if len(values) == 0 && len(cfg.SeverityValues) > 0 {
+		values = cfg.SeverityValues
 	}
 
 	if len(values) == 0 {

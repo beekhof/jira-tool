@@ -76,6 +76,12 @@ story_point_options:
 story_points_field_id: customfield_10016  # Optional: customize if your Jira uses a different field ID
 epic_link_field_id: customfield_10011     # Optional: Epic Link custom field ID (auto-detected during init)
 ticket_filter: "assignee = currentUser()" # Optional: JQL filter to append to all ticket queries
+severity_field_id: customfield_12345     # Optional: Custom field ID for severity (auto-detected during init)
+severity_values:                          # Optional: List of allowed severity values (used if Jira API doesn't provide them)
+  - Low
+  - Medium
+  - High
+  - Critical
 ```
 
 ### Configuration Options
@@ -98,6 +104,14 @@ ticket_filter: "assignee = currentUser()" # Optional: JQL filter to append to al
   - Applied to all commands that query tickets (review, assign, estimate, create's parent selection, etc.)
   - Filter is appended with AND: `(existing_query) AND (filter)`
   - Can be overridden with `--filter` global flag
+- **`severity_field_id`** (optional): Custom field ID for severity in your Jira instance
+  - **Automatically detected during `jira utils init`**: The tool will query your Jira instance to find the severity field
+  - If automatic detection fails, you'll be prompted to enter it manually
+  - You can manually configure it in your config file if needed
+- **`severity_values`** (optional): List of allowed severity values
+  - Used if the Jira API doesn't return predefined values for the severity field
+  - Configure during `jira utils init` by entering comma-separated values (e.g., "Low,Medium,High,Critical")
+  - If not configured and Jira API doesn't provide values, you'll be prompted to enter severity manually
   - Can be bypassed with `--no-filter` global flag
   - Examples: `"assignee = currentUser()"`, `"status != Done"`, `"project = PROJ AND assignee = currentUser()"`
 

@@ -217,6 +217,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		cfg.DescriptionMinLength = existingCfg.DescriptionMinLength
 		cfg.DescriptionQualityAI = existingCfg.DescriptionQualityAI
 		cfg.SeverityFieldID = existingCfg.SeverityFieldID
+		cfg.SeverityValues = existingCfg.SeverityValues
 		cfg.DefaultBoardID = existingCfg.DefaultBoardID
 	}
 
@@ -300,6 +301,32 @@ func runInit(cmd *cobra.Command, args []string) error {
 		}
 	} else if existingCfg != nil {
 		cfg.SeverityFieldID = existingCfg.SeverityFieldID
+	}
+
+	// Prompt for severity values if severity field is configured
+	if cfg.SeverityFieldID != "" {
+		fmt.Print("\nSeverity values (comma-separated, e.g., 'Low,Medium,High,Critical' or 'skip' to use Jira API values only): ")
+		severityValuesInput, err := reader.ReadString('\n')
+		if err == nil {
+			severityValuesInput = strings.TrimSpace(severityValuesInput)
+			if severityValuesInput != "" && strings.ToLower(severityValuesInput) != "skip" {
+				// Parse comma-separated values
+				values := strings.Split(severityValuesInput, ",")
+				cfg.SeverityValues = make([]string, 0, len(values))
+				for _, v := range values {
+					trimmed := strings.TrimSpace(v)
+					if trimmed != "" {
+						cfg.SeverityValues = append(cfg.SeverityValues, trimmed)
+					}
+				}
+			} else if existingCfg != nil && len(existingCfg.SeverityValues) > 0 {
+				cfg.SeverityValues = existingCfg.SeverityValues
+			}
+		} else if existingCfg != nil && len(existingCfg.SeverityValues) > 0 {
+			cfg.SeverityValues = existingCfg.SeverityValues
+		}
+	} else if existingCfg != nil && len(existingCfg.SeverityValues) > 0 {
+		cfg.SeverityValues = existingCfg.SeverityValues
 	}
 
 	// Prompt for default board ID
