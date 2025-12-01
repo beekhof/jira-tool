@@ -354,6 +354,15 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 			}
 		}
 
+		if stepInfo.step == StepStoryPoints {
+			// Check if story points are already set
+			if ticket.Fields.StoryPoints > 0 {
+				// Story points already set, mark as complete and skip
+				status.MarkComplete(StepStoryPoints)
+				continue
+			}
+		}
+
 		// Execute step with retry logic
 		for {
 			completed, err := stepInfo.handler()

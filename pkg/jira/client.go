@@ -1020,9 +1020,15 @@ func (c *jiraClient) GetIssue(issueKey string) (*Issue, error) {
 
 // searchIssues performs a JQL search
 func (c *jiraClient) searchIssues(jql string) ([]Issue, error) {
+	// Use configured story points field ID, default to customfield_10016
+	storyPointsField := c.storyPointsFieldID
+	if storyPointsField == "" {
+		storyPointsField = "customfield_10016"
+	}
+	
 	endpoint, err := buildURL(c.baseURL, "/rest/api/2/search", map[string]string{
 		"jql":        jql,
-		"fields":     "summary,status,issuetype,priority,assignee,customfield_10016,components",
+		"fields":     fmt.Sprintf("summary,status,issuetype,priority,assignee,%s,components", storyPointsField),
 		"maxResults": "1000",
 	})
 	if err != nil {
@@ -1058,6 +1064,30 @@ func (c *jiraClient) searchIssues(jql string) ([]Issue, error) {
 	var issueResp IssueResponse
 	if err := json.Unmarshal(body, &issueResp); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Post-process to extract story points from dynamic field ID if different from default
+	if storyPointsField != "customfield_10016" {
+		var rawResp struct {
+			Issues []struct {
+				Key    string          `json:"key"`
+				Fields json.RawMessage `json:"fields"`
+			} `json:"issues"`
+		}
+		if err := json.Unmarshal(body, &rawResp); err == nil {
+			for i := range issueResp.Issues {
+				if i < len(rawResp.Issues) {
+					var fieldsMap map[string]interface{}
+					if err := json.Unmarshal(rawResp.Issues[i].Fields, &fieldsMap); err == nil {
+						if spValue, ok := fieldsMap[storyPointsField]; ok {
+							if spFloat, ok := spValue.(float64); ok {
+								issueResp.Issues[i].Fields.StoryPoints = spFloat
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
 	return issueResp.Issues, nil
