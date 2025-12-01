@@ -112,6 +112,7 @@ ticket_filter: "assignee = currentUser()" # Optional: JQL filter to append to al
   - `readline`: Use readline for enhanced terminal input (arrow keys, backspace) with no preview/edit
   - `editor`: Always open external editor for each answer
   - `readline_with_preview`: Use readline for input, then show preview and allow editing (default)
+  - **Tip**: During readline input, type `:edit` or `:e` to switch to editor mid-input
 
 #### Prompt Templates
 
