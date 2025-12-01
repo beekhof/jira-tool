@@ -388,9 +388,6 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 				ticket = issues[0]
 			}
 
-			// Update progress display
-			DisplayProgress(ticket, *status)
-
 			break // Move to next step
 		}
 	}
