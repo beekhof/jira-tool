@@ -295,7 +295,7 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 						return false, err
 					}
 					response = strings.TrimSpace(strings.ToLower(response))
-					if response == "y" || response == "yes" {
+					if response == "" || response == "y" || response == "yes" {
 						// Get existing description
 						existingDesc, _ := client.GetTicketDescription(ticket.Key)
 						// Run Q&A flow (pass issueTypeName for Epic/Feature detection, include child tickets in context)
