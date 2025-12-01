@@ -1,9 +1,7 @@
 package qa
 
 import (
-	"bufio"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/beekhof/jira-tool/pkg/gemini"
@@ -18,14 +16,24 @@ import (
 // existingDescription is included in the context if provided (for improving existing descriptions)
 // jiraClient and ticketKey are optional - if provided, child ticket summaries will be included in context
 // epicLinkFieldID is optional - required for Epic tickets to fetch epic children
+// answerInputMethod controls how answers are input: "readline", "editor", or "readline_with_preview" (default: "readline_with_preview")
 //
 // Users can reject poor questions by entering "reject" or an empty string.
 // Rejected questions are skipped, a new question is generated, and the flow continues.
 // Rejected questions are added to history as "Q: [question] - REJECTED" for context.
 // Users can end the Q&A early by entering "skip" or "done".
-func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions int, summaryOrKey string, issueTypeName string, existingDescription string, jiraClient jira.JiraClient, ticketKey string, epicLinkFieldID string) (string, error) {
+// Users can type ":edit" or ":e" during readline input to switch to editor.
+func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions int, summaryOrKey string, issueTypeName string, existingDescription string, jiraClient jira.JiraClient, ticketKey string, epicLinkFieldID string, answerInputMethod string) (string, error) {
 	history := []string{}
-	reader := bufio.NewReader(os.Stdin)
+
+	// Default to readline_with_preview if not specified
+	if answerInputMethod == "" {
+		answerInputMethod = "readline_with_preview"
+	}
+	// Validate method
+	if answerInputMethod != "readline" && answerInputMethod != "editor" && answerInputMethod != "readline_with_preview" {
+		answerInputMethod = "readline_with_preview"
+	}
 
 	// Include existing description in context if provided
 	enhancedContext := initialContext
@@ -67,10 +75,10 @@ func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions 
 		}
 
 		// Print the question and prompt for answer
-		fmt.Printf("Gemini asks: %s? > ", question)
+		prompt := fmt.Sprintf("Gemini asks: %s? > ", question)
 
-		// Read the user's answer
-		answer, err := reader.ReadString('\n')
+		// Read the user's answer using enhanced input
+		answer, err := ReadAnswerWithReadline(prompt, answerInputMethod)
 		if err != nil {
 			return "", fmt.Errorf("failed to read answer: %w", err)
 		}
@@ -78,6 +86,12 @@ func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions 
 		// Trim whitespace
 		answer = trimSpace(answer)
 		question = trimSpace(question)
+
+		// Show preview and allow editing (if method supports it)
+		answer, err = PreviewAndEditLoop(answer, answerInputMethod)
+		if err != nil {
+			return "", fmt.Errorf("failed to preview/edit answer: %w", err)
+		}
 
 		// Handle rejection (empty string or "reject")
 		if answer == "" || strings.EqualFold(answer, "reject") {

@@ -235,7 +235,7 @@ Do not include any preamble or explanation, just the question.`
 // getDefaultEpicFeaturePrompt returns the default Epic/Feature description generation prompt template
 func getDefaultEpicFeaturePrompt() string {
 	return `You are helping to create a Jira Epic or Feature description. 
-Based on the following context and conversation history, write a clear and concise high-level description formated as plain text suitable for a Jira description field.
+Based on the following context and conversation history, write a clear and concise high-level description formated as markdown.
 
 Focus on the "what" and "why" at a strategic level, not implementation details.
 Use headings and bullet points to make the information scannable and digestible.

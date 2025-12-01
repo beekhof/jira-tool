@@ -541,7 +541,11 @@ func handleDetail(client jira.JiraClient, reader *bufio.Reader, ticketID, summar
 	// Run Q&A flow (pass summary to detect spike based on SPIKE prefix, pass issueTypeName for Epic/Feature detection, include child tickets in context)
 	// Get existing description if available
 	existingDesc, _ := client.GetTicketDescription(ticketID)
-	description, err := qa.RunQnAFlow(geminiClient, summary, cfg.MaxQuestions, ticketSummary, issueTypeName, existingDesc, client, ticketID, cfg.EpicLinkFieldID)
+	answerInputMethod := cfg.AnswerInputMethod
+	if answerInputMethod == "" {
+		answerInputMethod = "readline_with_preview"
+	}
+	description, err := qa.RunQnAFlow(geminiClient, summary, cfg.MaxQuestions, ticketSummary, issueTypeName, existingDesc, client, ticketID, cfg.EpicLinkFieldID, answerInputMethod)
 	if err != nil {
 		return err
 	}

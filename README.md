@@ -108,6 +108,10 @@ ticket_filter: "assignee = currentUser()" # Optional: JQL filter to append to al
   - Common options: `gemini-2.5-flash`, `gemini-2.5-pro`, `gemini-2.0-flash`
 - **`max_questions`** (optional): Maximum number of questions in Q&A flow (default: `4`)
 - **`review_page_size`** (optional): Number of tickets per page in review command (default: `10`)
+- **`answer_input_method`** (optional): Method for inputting answers in Q&A flow (default: `readline_with_preview`)
+  - `readline`: Use readline for enhanced terminal input (arrow keys, backspace) with no preview/edit
+  - `editor`: Always open external editor for each answer
+  - `readline_with_preview`: Use readline for input, then show preview and allow editing (default)
 
 #### Prompt Templates
 

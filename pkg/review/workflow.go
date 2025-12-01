@@ -235,7 +235,11 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 						existingDesc, _ := client.GetTicketDescription(ticket.Key)
 						// Run Q&A flow (pass issueTypeName for Epic/Feature detection, include child tickets in context)
 						issueTypeName := ticket.Fields.IssueType.Name
-						description, err := qa.RunQnAFlow(geminiClient, ticket.Fields.Summary, cfg.MaxQuestions, ticket.Fields.Summary, issueTypeName, existingDesc, client, ticket.Key, cfg.EpicLinkFieldID)
+						answerInputMethod := cfg.AnswerInputMethod
+						if answerInputMethod == "" {
+							answerInputMethod = "readline_with_preview"
+						}
+						description, err := qa.RunQnAFlow(geminiClient, ticket.Fields.Summary, cfg.MaxQuestions, ticket.Fields.Summary, issueTypeName, existingDesc, client, ticket.Key, cfg.EpicLinkFieldID, answerInputMethod)
 						if err != nil {
 							return false, err
 						}
