@@ -289,7 +289,7 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 				}
 				if !isValid {
 					fmt.Printf("Description issue: %s\n", reason)
-					fmt.Print("Generate/update description? [y/N] ")
+					fmt.Print("Generate/update description? [Y/n] ")
 					response, err := reader.ReadString('\n')
 					if err != nil {
 						return false, err
