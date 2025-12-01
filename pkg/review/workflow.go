@@ -336,11 +336,20 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 			continue
 		}
 
-		// Check if step is already complete in ticket (for component step)
+		// Check if step is already complete in ticket (for component and assignment steps)
 		if stepInfo.step == StepComponent {
 			if len(ticket.Fields.Components) > 0 {
 				// Component already set, mark as complete and skip
 				status.MarkComplete(StepComponent)
+				continue
+			}
+		}
+
+		if stepInfo.step == StepAssignment {
+			// Check if ticket is already assigned
+			if ticket.Fields.Assignee.DisplayName != "" || ticket.Fields.Assignee.AccountID != "" || ticket.Fields.Assignee.Name != "" {
+				// Already assigned, mark as complete and skip
+				status.MarkComplete(StepAssignment)
 				continue
 			}
 		}
