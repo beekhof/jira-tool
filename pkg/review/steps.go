@@ -183,29 +183,7 @@ func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *conf
 		}
 
 		if len(matchingComponents) == 0 {
-			// No matches found - try to use the name directly (component might exist but not be in the list)
-			// First, try to find exact match (case-insensitive)
-			var exactMatch *jira.Component
-			for i := range components {
-				if strings.EqualFold(components[i].Name, searchInput) {
-					exactMatch = &components[i]
-					break
-				}
-			}
-
-			if exactMatch != nil {
-				// Found exact match, use it
-				if err := client.UpdateTicketComponents(ticket.Key, []string{exactMatch.ID}); err != nil {
-					return false, fmt.Errorf("failed to update component: %w", err)
-				}
-				state.AddRecentComponent(exactMatch.Name)
-				if err := config.SaveState(state, statePath); err != nil {
-					_ = err // Log but don't fail
-				}
-				return true, nil
-			}
-
-			// No match found - try case-insensitive exact match first
+			// No matches found - try case-insensitive exact match
 			var exactMatch *jira.Component
 			for i := range components {
 				if strings.EqualFold(components[i].Name, searchInput) {
@@ -228,18 +206,56 @@ func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *conf
 			}
 
 			// Still no match - component might not be in the fetched list
-			// This could happen if:
-			// 1. Component is archived/inactive (Jira API might filter them)
-			// 2. Component list is paginated and we're not getting all components
-			// 3. Component exists in a different project
-			// 4. Cache is stale
-			fmt.Printf("Component '%s' not found in the component list.\n", searchInput)
+			// Try clearing cache and re-fetching
+			fmt.Printf("\nComponent '%s' not found in the component list.\n", searchInput)
+			fmt.Println("This might be due to a stale cache. Attempting to refresh...")
+			
+			// Clear component cache for this project
+			client.ClearComponentCache(projectKey)
+			
+			// Re-fetch components
+			refreshedComponents, err := client.GetComponents(projectKey)
+			if err != nil {
+				return false, fmt.Errorf("failed to refresh components: %w", err)
+			}
+			
+			// Try searching again in refreshed list
+			var refreshedMatch *jira.Component
+			searchLower := strings.ToLower(searchInput)
+			for i := range refreshedComponents {
+				if strings.EqualFold(refreshedComponents[i].Name, searchInput) {
+					refreshedMatch = &refreshedComponents[i]
+					break
+				} else if strings.Contains(strings.ToLower(refreshedComponents[i].Name), searchLower) {
+					// Also check for partial match
+					if refreshedMatch == nil {
+						refreshedMatch = &refreshedComponents[i]
+					}
+				}
+			}
+			
+			if refreshedMatch != nil {
+				// Found it after refresh!
+				if err := client.UpdateTicketComponents(ticket.Key, []string{refreshedMatch.ID}); err != nil {
+					return false, fmt.Errorf("failed to update component: %w", err)
+				}
+				state.AddRecentComponent(refreshedMatch.Name)
+				if err := config.SaveState(state, statePath); err != nil {
+					_ = err // Log but don't fail
+				}
+				fmt.Printf("Component found and set to: %s\n", refreshedMatch.Name)
+				return true, nil
+			}
+			
+			// Still not found after refresh
+			fmt.Println("Component still not found after refreshing the list.")
 			fmt.Println("Possible reasons:")
 			fmt.Println("  - Component might be archived or inactive")
-			fmt.Println("  - Component list might be incomplete")
 			fmt.Println("  - Component might be in a different project")
-			fmt.Print("Try entering the component name exactly as it appears in Jira, or select from the list above: ")
-			return false, fmt.Errorf("component '%s' not found in project %s. Please verify the component name and ensure it exists in the project", searchInput, projectKey)
+			fmt.Println("  - Component name might be different in Jira")
+			fmt.Println("\nTip: Try running with --no-cache flag to ensure fresh data:")
+			fmt.Printf("  jira review %s --no-cache\n", ticket.Key)
+			return false, fmt.Errorf("component '%s' not found in project %s even after refreshing. Please verify the component name and ensure it exists in the project", searchInput, projectKey)
 		}
 
 		// Show matching components

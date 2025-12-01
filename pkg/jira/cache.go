@@ -113,3 +113,35 @@ func (c *Cache) Clear() error {
 
 	return nil
 }
+
+// ClearComponentsForProject clears the cached components for a specific project
+func (c *Cache) ClearComponentsForProject(projectKey string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.Components != nil {
+		delete(c.Components, projectKey)
+		// Save the updated cache
+		_ = c.saveUnlocked() // Ignore save errors
+	}
+}
+
+// saveUnlocked saves the cache without acquiring the lock (assumes lock is already held)
+func (c *Cache) saveUnlocked() error {
+	// Create directory if it doesn't exist
+	dir := filepath.Dir(c.path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create cache directory: %w", err)
+	}
+
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal cache: %w", err)
+	}
+
+	if err := os.WriteFile(c.path, data, 0644); err != nil {
+		return fmt.Errorf("failed to write cache file: %w", err)
+	}
+
+	return nil
+}
