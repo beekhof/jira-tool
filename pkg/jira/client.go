@@ -1704,6 +1704,13 @@ func (c *jiraClient) GetComponents(projectKey string) ([]Component, error) {
 	return components, nil
 }
 
+// ClearComponentCache clears the cached components for a project
+func (c *jiraClient) ClearComponentCache(projectKey string) {
+	if c.cache != nil {
+		c.cache.ClearComponentsForProject(projectKey)
+	}
+}
+
 // UpdateTicketComponents updates the components for a ticket
 func (c *jiraClient) UpdateTicketComponents(ticketID string, componentIDs []string) error {
 	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s", c.baseURL, ticketID)
