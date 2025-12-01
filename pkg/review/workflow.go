@@ -248,10 +248,11 @@ func HandleWorkflowError(err error, step WorkflowStep, reader *bufio.Reader) (Ac
 // ProcessTicketWorkflow processes a single ticket through the guided review workflow
 func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiClient, reader *bufio.Reader, cfg *config.Config, ticket jira.Issue, configDir string) error {
 	// Initialize status based on current ticket state
-	status := InitializeStatusFromTicket(client, ticket, cfg)
+	status := &TicketStatus{}
+	*status = InitializeStatusFromTicket(client, ticket, cfg)
 
 	// Display initial progress
-	DisplayProgress(ticket, status)
+	DisplayProgress(ticket, *status)
 
 	// Process each step in order
 	steps := []struct {
