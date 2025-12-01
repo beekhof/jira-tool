@@ -119,7 +119,8 @@ func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *conf
 	for i, comp := range components {
 		fmt.Printf("[%d] %s\n", i+1, comp.Name)
 	}
-	fmt.Printf("[%d] Skip\n", len(components)+1)
+	fmt.Printf("[%d] Search/Enter component name\n", len(components)+1)
+	fmt.Printf("[%d] Skip\n", len(components)+2)
 	fmt.Print("> ")
 
 	choice, err := reader.ReadString('\n')
@@ -132,9 +133,113 @@ func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *conf
 		return false, fmt.Errorf("invalid selection: %s", choice)
 	}
 
-	if selected == len(components)+1 {
+	if selected == len(components)+2 {
 		// User skipped - return false to skip remaining steps
 		return false, nil
+	}
+
+	if selected == len(components)+1 {
+		// User wants to search/enter component name
+		fmt.Print("Enter component name to search for (or exact name to create): ")
+		searchInput, err := reader.ReadString('\n')
+		if err != nil {
+			return false, err
+		}
+		searchInput = strings.TrimSpace(searchInput)
+		if searchInput == "" {
+			return false, fmt.Errorf("component name cannot be empty")
+		}
+
+		// Search for component by name (case-insensitive partial match)
+		var matchingComponents []jira.Component
+		searchLower := strings.ToLower(searchInput)
+		for _, comp := range components {
+			if strings.Contains(strings.ToLower(comp.Name), searchLower) {
+				matchingComponents = append(matchingComponents, comp)
+			}
+		}
+
+		if len(matchingComponents) == 0 {
+			// No matches found - try to use the name directly (component might exist but not be in the list)
+			// First, try to find exact match (case-insensitive)
+			var exactMatch *jira.Component
+			for i := range components {
+				if strings.EqualFold(components[i].Name, searchInput) {
+					exactMatch = &components[i]
+					break
+				}
+			}
+
+			if exactMatch != nil {
+				// Found exact match, use it
+				if err := client.UpdateTicketComponents(ticket.Key, []string{exactMatch.ID}); err != nil {
+					return false, fmt.Errorf("failed to update component: %w", err)
+				}
+				state.AddRecentComponent(exactMatch.Name)
+				if err := config.SaveState(state, statePath); err != nil {
+					_ = err // Log but don't fail
+				}
+				return true, nil
+			}
+
+			// No match found - try to create/assign by name directly
+			// Note: Jira API typically requires component ID, but we can try with name
+			// This might fail if the component doesn't exist, but we'll let the API error handle it
+			fmt.Printf("Component '%s' not found in list. Attempting to assign by name...\n", searchInput)
+			// We need to create a component object with just the name
+			// Since UpdateTicketComponents requires IDs, we'll need to try a different approach
+			// For now, return an error suggesting the component needs to exist
+			return false, fmt.Errorf("component '%s' not found. Please ensure the component exists in the project, or select from the list above", searchInput)
+		}
+
+		// Show matching components
+		if len(matchingComponents) == 1 {
+			// Only one match, use it
+			if err := client.UpdateTicketComponents(ticket.Key, []string{matchingComponents[0].ID}); err != nil {
+				return false, fmt.Errorf("failed to update component: %w", err)
+			}
+			state.AddRecentComponent(matchingComponents[0].Name)
+			if err := config.SaveState(state, statePath); err != nil {
+				_ = err // Log but don't fail
+			}
+			return true, nil
+		}
+
+		// Multiple matches, show them
+		fmt.Println("Found matching components:")
+		for i, comp := range matchingComponents {
+			fmt.Printf("[%d] %s\n", i+1, comp.Name)
+		}
+		fmt.Printf("[%d] Cancel\n", len(matchingComponents)+1)
+		fmt.Print("> ")
+
+		matchChoice, err := reader.ReadString('\n')
+		if err != nil {
+			return false, err
+		}
+		matchChoice = strings.TrimSpace(matchChoice)
+		matchSelected, err := strconv.Atoi(matchChoice)
+		if err != nil {
+			return false, fmt.Errorf("invalid selection: %s", matchChoice)
+		}
+
+		if matchSelected == len(matchingComponents)+1 {
+			return false, nil // User cancelled
+		}
+
+		if matchSelected < 1 || matchSelected > len(matchingComponents) {
+			return false, fmt.Errorf("invalid selection: %d", matchSelected)
+		}
+
+		selectedComp := matchingComponents[matchSelected-1]
+		if err := client.UpdateTicketComponents(ticket.Key, []string{selectedComp.ID}); err != nil {
+			return false, fmt.Errorf("failed to update component: %w", err)
+		}
+		state.AddRecentComponent(selectedComp.Name)
+		if err := config.SaveState(state, statePath); err != nil {
+			_ = err // Log but don't fail
+		}
+		return true, nil
 	}
 
 	if selected < 1 || selected > len(components) {
