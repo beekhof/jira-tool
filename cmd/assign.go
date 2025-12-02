@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
 
 	"github.com/beekhof/jira-tool/pkg/config"
 	"github.com/beekhof/jira-tool/pkg/jira"
