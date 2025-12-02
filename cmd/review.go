@@ -125,7 +125,7 @@ func runReview(cmd *cobra.Command, args []string) error {
 			geminiClient = nil
 		}
 
-		if err := review.ProcessTicketWorkflow(client, geminiClient, reader, cfg, selectedIssue, configDir); err != nil {
+		if err := review.ProcessTicketWorkflow(client, geminiClient, reader, cfg, &selectedIssue, configDir); err != nil {
 			return fmt.Errorf("workflow error: %w", err)
 		}
 		return nil
@@ -328,7 +328,15 @@ func runReview(cmd *cobra.Command, args []string) error {
 }
 
 // reviewSelectedTickets processes each selected ticket through the guided workflow
-func reviewSelectedTickets(client jira.JiraClient, geminiClient gemini.GeminiClient, reader *bufio.Reader, cfg *config.Config, allIssues []jira.Issue, selected, actedOn map[string]bool, configDir string) error {
+func reviewSelectedTickets(
+	client jira.JiraClient,
+	geminiClient gemini.GeminiClient,
+	reader *bufio.Reader,
+	cfg *config.Config,
+	allIssues []jira.Issue,
+	selected, actedOn map[string]bool,
+	configDir string,
+) error {
 	// Get list of selected tickets
 	selectedTickets := []jira.Issue{}
 	for i := range allIssues {
@@ -348,7 +356,7 @@ func reviewSelectedTickets(client jira.JiraClient, geminiClient gemini.GeminiCli
 		ticket := &selectedTickets[i]
 		fmt.Printf("=== [%d/%d] %s - %s ===\n", i+1, len(selectedTickets), ticket.Key, ticket.Fields.Summary)
 
-		if err := review.ProcessTicketWorkflow(client, geminiClient, reader, cfg, *ticket, configDir); err != nil {
+		if err := review.ProcessTicketWorkflow(client, geminiClient, reader, cfg, ticket, configDir); err != nil {
 			fmt.Printf("Error in workflow for %s: %v\n", ticket.Key, err)
 			fmt.Print("Continue with next ticket? [Y/n] ")
 			response, readErr := reader.ReadString('\n')
@@ -381,7 +389,7 @@ func handleReviewAction(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 	// Show ticket details and action menu
 	fmt.Printf("\nSelected: %s - %s\n", selectedIssue.Key, selectedIssue.Fields.Summary)
 	fmt.Printf("Priority: %s | Assignee: %s | Status: %s\n",
-		getPriorityName(selectedIssue), getAssigneeName(selectedIssue), selectedIssue.Fields.Status.Name)
+			getPriorityName(&selectedIssue), getAssigneeName(&selectedIssue), selectedIssue.Fields.Status.Name)
 
 	// For single ticket, don't show "back" option
 	if len(issues) == 1 {
@@ -457,14 +465,14 @@ func handleReviewAction(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 }
 
 // Helper functions to safely get priority and assignee names
-func getPriorityName(issue jira.Issue) string {
+func getPriorityName(issue *jira.Issue) string {
 	if issue.Fields.Priority.Name != "" {
 		return issue.Fields.Priority.Name
 	}
 	return "None"
 }
 
-func getAssigneeName(issue jira.Issue) string {
+func getAssigneeName(issue *jira.Issue) string {
 	if issue.Fields.Assignee.DisplayName != "" {
 		return issue.Fields.Assignee.DisplayName
 	}

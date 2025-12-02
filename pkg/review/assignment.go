@@ -12,7 +12,7 @@ import (
 )
 
 // HandleAssignmentStep handles ticket assignment with auto-actions (transition, sprint, release)
-func HandleAssignmentStep(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticket jira.Issue, configDir string) (bool, error) {
+func HandleAssignmentStep(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticket *jira.Issue, configDir string) (bool, error) {
 	// Check if ticket is already assigned
 	if ticket.Fields.Assignee.DisplayName != "" ||
 		ticket.Fields.Assignee.AccountID != "" ||

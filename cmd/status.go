@@ -210,9 +210,9 @@ func runSprintStatus(cmd *cobra.Command, args []string) error {
 	for _, statusName := range statusOrder {
 		if groupIssues, ok := statusGroups[statusName]; ok {
 			fmt.Printf("[%s]\n", statusName)
-	for i := range groupIssues {
-		issue := &groupIssues[i]
-		points := issue.Fields.StoryPoints
+			for i := range groupIssues {
+				issue := &groupIssues[i]
+				points := issue.Fields.StoryPoints
 				if points > 0 {
 					fmt.Printf("  %s: %s (%.0f points)\n", issue.Key, issue.Fields.Summary, points)
 				} else {
@@ -390,9 +390,9 @@ func runReleaseStatus(cmd *cobra.Command, args []string) error {
 	for _, statusName := range statusOrder {
 		if groupIssues, ok := statusGroups[statusName]; ok {
 			fmt.Printf("[%s]\n", statusName)
-	for i := range groupIssues {
-		issue := &groupIssues[i]
-		points := issue.Fields.StoryPoints
+			for i := range groupIssues {
+				issue := &groupIssues[i]
+				points := issue.Fields.StoryPoints
 				if points > 0 {
 					fmt.Printf("  %s: %s (%.0f points)\n", issue.Key, issue.Fields.Summary, points)
 				} else {
@@ -504,9 +504,9 @@ func runSpikesStatus(cmd *cobra.Command, args []string) error {
 	for _, statusName := range statusOrder {
 		if issues, ok := statusGroups[statusName]; ok {
 			var points float64
-		for i := range issues {
-			points += issues[i].Fields.StoryPoints
-		}
+			for i := range issues {
+				points += issues[i].Fields.StoryPoints
+			}
 			fmt.Printf("%s: %d tickets (%.0f points)\n", statusName, len(issues), points)
 		}
 	}

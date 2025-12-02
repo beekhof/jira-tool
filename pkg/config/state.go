@@ -72,32 +72,34 @@ func SaveState(state *State, path string) error {
 
 // AddRecentAssignee adds a user to the recent assignees list (max 6 unique)
 func (s *State) AddRecentAssignee(userIdentifier string) {
-	s.RecentAssignees = addToRecentList(s.RecentAssignees, userIdentifier, 6)
+	s.RecentAssignees = addToRecentList(s.RecentAssignees, userIdentifier)
 }
 
 // AddRecentSprint adds a sprint to the recent sprints list (max 6 unique)
 func (s *State) AddRecentSprint(sprintName string) {
-	s.RecentSprints = addToRecentList(s.RecentSprints, sprintName, 6)
+	s.RecentSprints = addToRecentList(s.RecentSprints, sprintName)
 }
 
 // AddRecentRelease adds a release to the recent releases list (max 6 unique)
 func (s *State) AddRecentRelease(releaseName string) {
-	s.RecentReleases = addToRecentList(s.RecentReleases, releaseName, 6)
+	s.RecentReleases = addToRecentList(s.RecentReleases, releaseName)
 }
 
 // AddRecentComponent adds a component to the recent components list (max 6 unique)
 func (s *State) AddRecentComponent(componentName string) {
-	s.RecentComponents = addToRecentList(s.RecentComponents, componentName, 6)
+	s.RecentComponents = addToRecentList(s.RecentComponents, componentName)
 }
 
 // AddRecentParentTicket adds a parent ticket to the recent parent tickets list (max 6 unique)
 func (s *State) AddRecentParentTicket(ticketKey string) {
-	s.RecentParentTickets = addToRecentList(s.RecentParentTickets, ticketKey, 6)
+	s.RecentParentTickets = addToRecentList(s.RecentParentTickets, ticketKey)
 }
 
-// addToRecentList adds an item to a recent list, keeping only the last N unique items
+// addToRecentList adds an item to a recent list, keeping only the last 6 unique items
 // If the item already exists, it's moved to the end (most recent)
-func addToRecentList(list []string, item string, maxSize int) []string {
+const maxRecentItems = 6
+
+func addToRecentList(list []string, item string) []string {
 	// Remove the item if it already exists
 	result := []string{}
 	for _, existing := range list {
@@ -109,9 +111,9 @@ func addToRecentList(list []string, item string, maxSize int) []string {
 	// Add the item to the end
 	result = append(result, item)
 
-	// Keep only the last maxSize items
-	if len(result) > maxSize {
-		result = result[len(result)-maxSize:]
+	// Keep only the last maxRecentItems items
+	if len(result) > maxRecentItems {
+		result = result[len(result)-maxRecentItems:]
 	}
 
 	return result

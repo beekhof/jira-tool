@@ -63,7 +63,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Prompt for Jira API Token (password input)
 	fmt.Print("Jira API Token (press Enter to keep existing): ")
-	jiraTokenBytes, err := term.ReadPassword(int(syscall.Stdin))
+	jiraTokenBytes, err := term.ReadPassword(syscall.Stdin)
 	if err != nil {
 		return fmt.Errorf("failed to read Jira token: %w", err)
 	}
@@ -81,7 +81,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Prompt for Gemini API Key (password input)
 	fmt.Print("Gemini API Key (press Enter to keep existing): ")
-	geminiKeyBytes, err := term.ReadPassword(int(syscall.Stdin))
+	geminiKeyBytes, err := term.ReadPassword(syscall.Stdin)
 	if err != nil {
 		return fmt.Errorf("failed to read Gemini key: %w", err)
 	}
@@ -383,7 +383,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 			} else if existingCfg != nil && existingCfg.AnswerInputMethod != "" {
 				cfg.AnswerInputMethod = existingCfg.AnswerInputMethod
 			} else {
-				cfg.AnswerInputMethod = "readline" // Default
+				cfg.AnswerInputMethod = defaultInputMethod // Default
 			}
 		} else if existingCfg != nil && existingCfg.AnswerInputMethod != "" {
 			cfg.AnswerInputMethod = existingCfg.AnswerInputMethod

@@ -87,7 +87,7 @@ func assignSingleTicket(client jira.JiraClient, cfg *config.Config, ticketID str
 	refreshJQL = jira.ApplyTicketFilter(refreshJQL, filter)
 	updated, err := client.SearchTickets(refreshJQL)
 	if err == nil && len(updated) > 0 {
-		assignee := getAssigneeName(updated[0])
+		assignee := getAssigneeName(&updated[0])
 		if assignee != "Unassigned" {
 			fmt.Printf("Assigned %s successfully to %s.\n", ticketID, assignee)
 		} else {

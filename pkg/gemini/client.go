@@ -356,14 +356,18 @@ func (c *geminiClient) GenerateQuestion(history []string, context, summaryOrKey,
 
 // GenerateDescription generates a description based on history and context
 // Uses appropriate prompt template based on issue type (Epic/Feature, Spike, or default)
-func (c *geminiClient) GenerateDescription(history []string, context, summaryOrKey, issueTypeName string) (string, error) {
+func (c *geminiClient) GenerateDescription(
+	history []string, context, summaryOrKey, issueTypeName string,
+) (string, error) {
 	prompt := c.buildDescriptionPrompt(history, context, summaryOrKey, issueTypeName)
 	return c.generateContent(prompt)
 }
 
 // EstimateStoryPoints estimates story points for a ticket based on summary and description
 // Returns the estimated points, reasoning text, and any error
-func (c *geminiClient) EstimateStoryPoints(summary, description string, availablePoints []int) (points int, reasoning string, err error) {
+func (c *geminiClient) EstimateStoryPoints(
+	summary, description string, availablePoints []int,
+) (points int, reasoning string, err error) {
 	// Build the prompt
 	var pointsList strings.Builder
 	for i, points := range availablePoints {
@@ -647,7 +651,9 @@ func (c *geminiClient) generateContentOnce(prompt string) (string, error) {
 				Status  string `json:"status"`
 			} `json:"error"`
 		}
-		_ = json.Unmarshal(body, &apiError) // Try to parse error response, but continue even if it fails
+		if err := json.Unmarshal(body, &apiError); err == nil && apiError.Error.Message != "" {
+			// Use parsed error message if available
+		}
 		// If unmarshal failed, we'll use the generic error below
 
 		// Provide user-friendly error messages

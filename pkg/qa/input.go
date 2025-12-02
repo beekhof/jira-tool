@@ -36,61 +36,59 @@ func ReadAnswerWithReadline(prompt, method string) (string, error) {
 	}
 	defer rl.Close()
 
-	for {
-		line, err := rl.Readline()
-		if err != nil {
-			// EOF or interrupt - return empty string
-			if err == readline.ErrInterrupt {
-				return "", nil
-			}
-			return "", err
+	line, err := rl.Readline()
+	if err != nil {
+		// EOF or interrupt - return empty string
+		if err == readline.ErrInterrupt {
+			return "", nil
 		}
-
-		line = strings.TrimSpace(line)
-
-		// Check for editor command
-		if line == ":e" || line == ":edit" {
-			// Just the command - open editor with empty content
-			edited, err := editor.OpenInEditor("")
-			if err != nil {
-				fmt.Printf("Editor error: %v. Continuing with empty input.\n", err)
-				return "", nil
-			}
-			return edited, nil
-		}
-
-		// Check for editor command with content
-		if strings.HasPrefix(line, ":edit") {
-			// Extract content after ":edit"
-			content := strings.TrimPrefix(line, ":edit")
-			content = strings.TrimSpace(content)
-
-			// Open editor
-			edited, err := editor.OpenInEditor(content)
-			if err != nil {
-				fmt.Printf("Editor error: %v. Continuing with current input.\n", err)
-				return content, nil
-			}
-			return edited, nil
-		}
-
-		if strings.HasPrefix(line, ":e") {
-			// Extract content after ":e" (could be space or no space)
-			content := strings.TrimPrefix(line, ":e")
-			content = strings.TrimSpace(content)
-
-			// Open editor
-			edited, err := editor.OpenInEditor(content)
-			if err != nil {
-				fmt.Printf("Editor error: %v. Continuing with current input.\n", err)
-				return content, nil
-			}
-			return edited, nil
-		}
-
-		// Return answer
-		return line, nil
+		return "", err
 	}
+
+	line = strings.TrimSpace(line)
+
+	// Check for editor command
+	if line == ":e" || line == ":edit" {
+		// Just the command - open editor with empty content
+		edited, err := editor.OpenInEditor("")
+		if err != nil {
+			fmt.Printf("Editor error: %v. Continuing with empty input.\n", err)
+			return "", nil
+		}
+		return edited, nil
+	}
+
+	// Check for editor command with content
+	if strings.HasPrefix(line, ":edit") {
+		// Extract content after ":edit"
+		content := strings.TrimPrefix(line, ":edit")
+		content = strings.TrimSpace(content)
+
+		// Open editor
+		edited, err := editor.OpenInEditor(content)
+		if err != nil {
+			fmt.Printf("Editor error: %v. Continuing with current input.\n", err)
+			return content, nil
+		}
+		return edited, nil
+	}
+
+	if strings.HasPrefix(line, ":e") {
+		// Extract content after ":e" (could be space or no space)
+		content := strings.TrimPrefix(line, ":e")
+		content = strings.TrimSpace(content)
+
+		// Open editor
+		edited, err := editor.OpenInEditor(content)
+		if err != nil {
+			fmt.Printf("Editor error: %v. Continuing with current input.\n", err)
+			return content, nil
+		}
+		return edited, nil
+	}
+
+	// Return answer
+	return line, nil
 }
 
 // PreviewAndEditLoop shows preview and allows editing in a loop

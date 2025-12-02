@@ -117,7 +117,7 @@ func (ts *TicketStatus) MarkComplete(step WorkflowStep) {
 }
 
 // InitializeStatusFromTicket creates a TicketStatus based on the current ticket state
-func InitializeStatusFromTicket(client jira.JiraClient, ticket jira.Issue, cfg *config.Config) TicketStatus {
+func InitializeStatusFromTicket(client jira.JiraClient, ticket *jira.Issue, cfg *config.Config) TicketStatus {
 	status := TicketStatus{}
 
 	// Check Description
@@ -184,7 +184,7 @@ func InitializeStatusFromTicket(client jira.JiraClient, ticket jira.Issue, cfg *
 }
 
 // DisplayProgress shows a progress checklist for the ticket
-func DisplayProgress(ticket jira.Issue, status TicketStatus) {
+func DisplayProgress(ticket *jira.Issue, status TicketStatus) {
 	fmt.Printf("\nReviewing: %s - %s\n\n", ticket.Key, ticket.Fields.Summary)
 	fmt.Println("Progress:")
 
@@ -268,7 +268,7 @@ func HandleWorkflowError(err error, step WorkflowStep, reader *bufio.Reader) (Ac
 }
 
 // ProcessTicketWorkflow processes a single ticket through the guided review workflow
-func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiClient, reader *bufio.Reader, cfg *config.Config, ticket jira.Issue, configDir string) error {
+func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiClient, reader *bufio.Reader, cfg *config.Config, ticket *jira.Issue, configDir string) error {
 	// Initialize status based on current ticket state
 	status := &TicketStatus{}
 	*status = InitializeStatusFromTicket(client, ticket, cfg)
@@ -470,7 +470,7 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 			// Refresh ticket data from Jira
 			issues, err := client.SearchTickets(fmt.Sprintf("key = %s", ticket.Key))
 			if err == nil && len(issues) > 0 {
-				ticket = issues[0]
+				*ticket = issues[0]
 			}
 
 			break // Move to next step

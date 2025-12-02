@@ -24,7 +24,7 @@ func init() {
 See each sub-command's help for details on how to add the autocompletion to your shell.`,
 		DisableFlagsInUseLine: true,
 		ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
-		Args:                  cobra.ExactValidArgs(1),
+		Args:                  cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
 	}
 
 	// Add the standard completion subcommands

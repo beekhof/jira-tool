@@ -243,8 +243,8 @@ func estimateMultipleTickets(client jira.JiraClient, cfg *config.Config, storyPo
 			idx := start + i + 1
 
 			// Get priority and assignee
-			priority := getPriorityName(*issue)
-			assignee := getAssigneeName(*issue)
+			priority := getPriorityName(issue)
+			assignee := getAssigneeName(issue)
 
 			// Truncate summary if too long
 			summary := issue.Fields.Summary

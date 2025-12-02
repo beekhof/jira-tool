@@ -12,7 +12,7 @@ import (
 )
 
 // CheckDescriptionQuality checks if a ticket's description meets quality criteria
-func CheckDescriptionQuality(client jira.JiraClient, ticket jira.Issue, cfg *config.Config) (bool, string, error) {
+func CheckDescriptionQuality(client jira.JiraClient, ticket *jira.Issue, cfg *config.Config) (bool, string, error) {
 	// Fetch description
 	description, err := client.GetTicketDescription(ticket.Key)
 	if err != nil {
@@ -39,7 +39,7 @@ func CheckDescriptionQuality(client jira.JiraClient, ticket jira.Issue, cfg *con
 }
 
 // HandleComponentStep checks and assigns component if missing
-func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticket jira.Issue, configDir string) (bool, error) {
+func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticket *jira.Issue, configDir string) (bool, error) {
 	// Check if ticket has components
 	if len(ticket.Fields.Components) > 0 {
 		return true, nil // Already has components
@@ -331,7 +331,7 @@ func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *conf
 }
 
 // HandlePriorityStep checks and assigns priority if missing
-func HandlePriorityStep(client jira.JiraClient, reader *bufio.Reader, ticket jira.Issue) (bool, error) {
+func HandlePriorityStep(client jira.JiraClient, reader *bufio.Reader, ticket *jira.Issue) (bool, error) {
 	// Check if priority is set
 	if ticket.Fields.Priority.Name != "" {
 		return true, nil // Already set
@@ -378,7 +378,7 @@ func HandlePriorityStep(client jira.JiraClient, reader *bufio.Reader, ticket jir
 }
 
 // HandleSeverityStep checks and assigns severity if configured and missing
-func HandleSeverityStep(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticket jira.Issue) (bool, error) {
+func HandleSeverityStep(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticket *jira.Issue) (bool, error) {
 	// Check if severity field is configured
 	if cfg.SeverityFieldID == "" {
 		return true, nil // Not configured, skip step
@@ -476,7 +476,7 @@ func HandleSeverityStep(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 }
 
 // HandleStoryPointsStep checks and estimates story points if missing
-func HandleStoryPointsStep(client jira.JiraClient, geminiClient gemini.GeminiClient, reader *bufio.Reader, cfg *config.Config, ticket jira.Issue) (bool, error) {
+func HandleStoryPointsStep(client jira.JiraClient, geminiClient gemini.GeminiClient, reader *bufio.Reader, cfg *config.Config, ticket *jira.Issue) (bool, error) {
 	// Check if story points are set
 	if ticket.Fields.StoryPoints > 0 {
 		return true, nil // Already set
@@ -563,7 +563,7 @@ func HandleStoryPointsStep(client jira.JiraClient, geminiClient gemini.GeminiCli
 }
 
 // HandleBacklogTransitionStep transitions ticket to Backlog if in "New" state
-func HandleBacklogTransitionStep(client jira.JiraClient, ticket jira.Issue) (bool, error) {
+func HandleBacklogTransitionStep(client jira.JiraClient, ticket *jira.Issue) (bool, error) {
 	// Check if ticket is in "New" state
 	if ticket.Fields.Status.Name != "New" {
 		return true, nil // Not in New state, step complete

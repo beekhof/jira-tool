@@ -1471,7 +1471,6 @@ func (c *jiraClient) AssignTicket(ticketID, userAccountID, userName string) erro
 									return nil
 								}
 								// Still failed, use the error from resp2
-								body = body2
 								bodyStr = bodyStr2
 								resp = resp2
 							}

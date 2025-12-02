@@ -291,7 +291,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 				}
 
 				selectedIssue := issues[0]
-				if err := reviewTicket(client, reader, cfg, selectedIssue); err != nil {
+				if err := reviewTicket(client, reader, cfg, &selectedIssue); err != nil {
 					return fmt.Errorf("error reviewing ticket: %w", err)
 				}
 			}
@@ -493,7 +493,7 @@ func selectParentTicket(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 
 // reviewTicket handles the review workflow for a single ticket
 // This is shared between create and review commands
-func reviewTicket(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, issue jira.Issue) error {
+func reviewTicket(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, issue *jira.Issue) error {
 	for {
 		// Show ticket details and action menu
 		fmt.Printf("\n=== %s - %s ===\n", issue.Key, issue.Fields.Summary)
