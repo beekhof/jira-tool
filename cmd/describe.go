@@ -31,7 +31,7 @@ This command will:
 	RunE: runDescribe,
 }
 
-func runDescribe(cmd *cobra.Command, args []string) error {
+func runDescribe(_ *cobra.Command, args []string) error {
 	configDir := GetConfigDir()
 
 	// Load config

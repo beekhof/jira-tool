@@ -406,7 +406,7 @@ func runReleaseStatus(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runSpikesStatus(cmd *cobra.Command, args []string) error {
+func runSpikesStatus(_ *cobra.Command, args []string) error {
 	configDir := GetConfigDir()
 	client, err := jira.NewClient(configDir, GetNoCache())
 	if err != nil {

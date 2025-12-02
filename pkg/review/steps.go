@@ -478,7 +478,7 @@ func HandleSeverityStep(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 }
 
 // HandleStoryPointsStep checks and estimates story points if missing
-func HandleStoryPointsStep(client jira.JiraClient, geminiClient gemini.GeminiClient, reader *bufio.Reader, cfg *config.Config, ticket *jira.Issue) (bool, error) {
+func HandleStoryPointsStep(client jira.JiraClient, geminiClient gemini.GeminiClient, reader *bufio.Reader, _ *config.Config, ticket *jira.Issue) (bool, error) {
 	// Check if story points are set
 	if ticket.Fields.StoryPoints > 0 {
 		return true, nil // Already set

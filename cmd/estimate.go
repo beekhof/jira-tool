@@ -355,7 +355,7 @@ func estimateMultipleTickets(client jira.JiraClient, cfg *config.Config, storyPo
 }
 
 // estimateSelectedTickets estimates each selected ticket one by one
-func estimateSelectedTickets(client jira.JiraClient, cfg *config.Config, allIssues []jira.Issue, selected map[string]bool, storyPoints []int, configDir string) error {
+func estimateSelectedTickets(client jira.JiraClient, _ *config.Config, allIssues []jira.Issue, selected map[string]bool, storyPoints []int, configDir string) error {
 	// Get list of selected tickets
 	selectedTickets := []jira.Issue{}
 	for i := range allIssues {
