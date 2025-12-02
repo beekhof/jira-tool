@@ -519,7 +519,7 @@ func reviewTicket(client jira.JiraClient, reader *bufio.Reader, cfg *config.Conf
 				refreshJQL = jira.ApplyTicketFilter(refreshJQL, GetTicketFilter(cfg))
 				updated, err := client.SearchTickets(refreshJQL)
 				if err == nil && len(updated) > 0 {
-					issue = updated[0]
+					*issue = updated[0]
 				}
 			}
 		case "t", "triage":
@@ -532,7 +532,7 @@ func reviewTicket(client jira.JiraClient, reader *bufio.Reader, cfg *config.Conf
 				refreshJQL = jira.ApplyTicketFilter(refreshJQL, GetTicketFilter(cfg))
 				updated, err := client.SearchTickets(refreshJQL)
 				if err == nil && len(updated) > 0 {
-					issue = updated[0]
+					*issue = updated[0]
 				}
 			}
 		case "e", "estimate":
@@ -545,7 +545,7 @@ func reviewTicket(client jira.JiraClient, reader *bufio.Reader, cfg *config.Conf
 				refreshJQL = jira.ApplyTicketFilter(refreshJQL, GetTicketFilter(cfg))
 				updated, err := client.SearchTickets(refreshJQL)
 				if err == nil && len(updated) > 0 {
-					issue = updated[0]
+					*issue = updated[0]
 				}
 			}
 		case "d", "done":

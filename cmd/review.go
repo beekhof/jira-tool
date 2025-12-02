@@ -389,7 +389,7 @@ func handleReviewAction(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 	// Show ticket details and action menu
 	fmt.Printf("\nSelected: %s - %s\n", selectedIssue.Key, selectedIssue.Fields.Summary)
 	fmt.Printf("Priority: %s | Assignee: %s | Status: %s\n",
-			getPriorityName(&selectedIssue), getAssigneeName(&selectedIssue), selectedIssue.Fields.Status.Name)
+		getPriorityName(&selectedIssue), getAssigneeName(&selectedIssue), selectedIssue.Fields.Status.Name)
 
 	// For single ticket, don't show "back" option
 	if len(issues) == 1 {
