@@ -209,16 +209,16 @@ func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *conf
 			// Try clearing cache and re-fetching
 			fmt.Printf("\nComponent '%s' not found in the component list.\n", searchInput)
 			fmt.Println("This might be due to a stale cache. Attempting to refresh...")
-			
+
 			// Clear component cache for this project
 			client.ClearComponentCache(projectKey)
-			
+
 			// Re-fetch components
 			refreshedComponents, err := client.GetComponents(projectKey)
 			if err != nil {
 				return false, fmt.Errorf("failed to refresh components: %w", err)
 			}
-			
+
 			// Try searching again in refreshed list
 			var refreshedMatch *jira.Component
 			searchLower := strings.ToLower(searchInput)
@@ -233,7 +233,7 @@ func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *conf
 					}
 				}
 			}
-			
+
 			if refreshedMatch != nil {
 				// Found it after refresh!
 				if err := client.UpdateTicketComponents(ticket.Key, []string{refreshedMatch.ID}); err != nil {
@@ -246,7 +246,7 @@ func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *conf
 				fmt.Printf("Component found and set to: %s\n", refreshedMatch.Name)
 				return true, nil
 			}
-			
+
 			// Still not found after refresh
 			fmt.Println("Component still not found after refreshing the list.")
 			fmt.Println("Possible reasons:")
@@ -634,4 +634,3 @@ func SelectBoard(client jira.JiraClient, reader *bufio.Reader, cfg *config.Confi
 
 	return boards[selected-1].ID, nil
 }
-

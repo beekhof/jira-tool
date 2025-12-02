@@ -33,7 +33,7 @@ This command will:
 
 func runDescribe(cmd *cobra.Command, args []string) error {
 	configDir := GetConfigDir()
-	
+
 	// Load config
 	configPath := config.GetConfigPath(configDir)
 	cfg, err := config.LoadConfig(configPath)
@@ -83,11 +83,11 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 	if answerInputMethod == "" {
 		answerInputMethod = "readline"
 	}
-	
+
 	fmt.Printf("\nGenerating description for %s: %s\n", ticketID, ticketSummary)
 	fmt.Println("Answer the questions below to help generate a comprehensive description.")
 	fmt.Println()
-	
+
 	description, err := qa.RunQnAFlow(geminiClient, ticketSummary, cfg.MaxQuestions, ticketSummary, issueTypeName, existingDesc, client, ticketID, cfg.EpicLinkFieldID, answerInputMethod)
 	if err != nil {
 		return fmt.Errorf("failed to generate description: %w", err)
@@ -131,4 +131,3 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 func init() {
 	rootCmd.AddCommand(describeCmd)
 }
-

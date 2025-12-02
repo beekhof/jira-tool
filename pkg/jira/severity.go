@@ -213,4 +213,3 @@ func (c *jiraClient) UpdateTicketSeverity(ticketID, severityFieldID, severityVal
 
 	return nil
 }
-

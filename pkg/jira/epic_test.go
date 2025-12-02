@@ -14,8 +14,8 @@ func TestIsEpic(t *testing.T) {
 			name: "Epic issue type",
 			issue: &Issue{
 				Fields: struct {
-					Summary   string `json:"summary"`
-					Status    struct {
+					Summary string `json:"summary"`
+					Status  struct {
 						Name string `json:"name"`
 					} `json:"status"`
 					IssueType struct {
@@ -50,8 +50,8 @@ func TestIsEpic(t *testing.T) {
 			name: "Story issue type",
 			issue: &Issue{
 				Fields: struct {
-					Summary   string `json:"summary"`
-					Status    struct {
+					Summary string `json:"summary"`
+					Status  struct {
 						Name string `json:"name"`
 					} `json:"status"`
 					IssueType struct {
@@ -86,8 +86,8 @@ func TestIsEpic(t *testing.T) {
 			name: "Task issue type",
 			issue: &Issue{
 				Fields: struct {
-					Summary   string `json:"summary"`
-					Status    struct {
+					Summary string `json:"summary"`
+					Status  struct {
 						Name string `json:"name"`
 					} `json:"status"`
 					IssueType struct {
@@ -127,8 +127,8 @@ func TestIsEpic(t *testing.T) {
 			name: "Case insensitive - epic lowercase",
 			issue: &Issue{
 				Fields: struct {
-					Summary   string `json:"summary"`
-					Status    struct {
+					Summary string `json:"summary"`
+					Status  struct {
 						Name string `json:"name"`
 					} `json:"status"`
 					IssueType struct {
@@ -163,8 +163,8 @@ func TestIsEpic(t *testing.T) {
 			name: "Case insensitive - EPIC uppercase",
 			issue: &Issue{
 				Fields: struct {
-					Summary   string `json:"summary"`
-					Status    struct {
+					Summary string `json:"summary"`
+					Status  struct {
 						Name string `json:"name"`
 					} `json:"status"`
 					IssueType struct {
@@ -206,4 +206,3 @@ func TestIsEpic(t *testing.T) {
 		})
 	}
 }
-

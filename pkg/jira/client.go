@@ -1070,7 +1070,7 @@ func (c *jiraClient) searchIssues(jql string) ([]Issue, error) {
 	if storyPointsField == "" {
 		storyPointsField = "customfield_10016"
 	}
-	
+
 	endpoint, err := buildURL(c.baseURL, "/rest/api/2/search", map[string]string{
 		"jql":        jql,
 		"fields":     fmt.Sprintf("summary,status,issuetype,priority,assignee,%s,components", storyPointsField),

@@ -13,4 +13,3 @@ func IsEpic(issueTypeName string) bool {
 func IsFeature(issueTypeName string) bool {
 	return strings.EqualFold(strings.TrimSpace(issueTypeName), "Feature")
 }
-

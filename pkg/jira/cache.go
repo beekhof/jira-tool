@@ -10,10 +10,10 @@ import (
 
 // Cache holds cached Jira data
 type Cache struct {
-	Priorities []Priority        `json:"priorities,omitempty"`
-	Sprints    []SprintParsed    `json:"sprints,omitempty"`
-	Releases   []ReleaseParsed   `json:"releases,omitempty"`
-	Users      map[string][]User `json:"users,omitempty"` // keyed by search query
+	Priorities []Priority             `json:"priorities,omitempty"`
+	Sprints    []SprintParsed         `json:"sprints,omitempty"`
+	Releases   []ReleaseParsed        `json:"releases,omitempty"`
+	Users      map[string][]User      `json:"users,omitempty"`      // keyed by search query
 	Components map[string][]Component `json:"components,omitempty"` // keyed by project key
 	mu         sync.RWMutex
 	path       string

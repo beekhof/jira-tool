@@ -598,6 +598,8 @@ func handleTriage(client jira.JiraClient, reader *bufio.Reader, ticketID string)
 	return client.UpdateTicketPriority(ticketID, priorities[selected-1].ID)
 }
 
+// handleDetail is unused - keeping for potential future use
+// Use 'jira-tool describe' command instead
 func handleDetail(client jira.JiraClient, reader *bufio.Reader, ticketID, summary string) error {
 	configDir := GetConfigDir()
 

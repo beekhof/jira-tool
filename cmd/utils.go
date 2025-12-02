@@ -12,11 +12,11 @@ var utilsCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(utilsCmd)
-	
+
 	// Register completion command under utils instead of root
 	// Disable the default completion command and create our own
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	
+
 	completionCmd := &cobra.Command{
 		Use:   "completion [bash|zsh|fish|powershell]",
 		Short: "Generate completion script",
@@ -26,7 +26,7 @@ See each sub-command's help for details on how to add the autocompletion to your
 		ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
 		Args:                  cobra.ExactValidArgs(1),
 	}
-	
+
 	// Add the standard completion subcommands
 	bashCmd := &cobra.Command{
 		Use:   "bash",
@@ -46,7 +46,7 @@ To load completions for all new sessions, execute once:
 			return rootCmd.GenBashCompletion(cmd.OutOrStdout())
 		},
 	}
-	
+
 	zshCmd := &cobra.Command{
 		Use:   "zsh",
 		Short: "Generate zsh completion script",
@@ -62,7 +62,7 @@ To load completions for all new sessions, add to your ~/.zshrc:
 			return rootCmd.GenZshCompletion(cmd.OutOrStdout())
 		},
 	}
-	
+
 	fishCmd := &cobra.Command{
 		Use:   "fish",
 		Short: "Generate fish completion script",
@@ -78,7 +78,7 @@ To load completions for all new sessions, execute once:
 			return rootCmd.GenFishCompletion(cmd.OutOrStdout(), true)
 		},
 	}
-	
+
 	powershellCmd := &cobra.Command{
 		Use:   "powershell",
 		Short: "Generate powershell completion script",
@@ -94,8 +94,7 @@ To load completions for all new sessions, add to your PowerShell profile:
 			return rootCmd.GenPowerShellCompletion(cmd.OutOrStdout())
 		},
 	}
-	
+
 	completionCmd.AddCommand(bashCmd, zshCmd, fishCmd, powershellCmd)
 	utilsCmd.AddCommand(completionCmd)
 }
-

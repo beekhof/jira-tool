@@ -190,11 +190,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Merge with existing config to preserve all settings
 	cfg := &config.Config{
-		JiraURL:         jiraURL,
-		DefaultProject:  defaultProject,
-		DefaultTaskType: defaultTaskType,
+		JiraURL:            jiraURL,
+		DefaultProject:     defaultProject,
+		DefaultTaskType:    defaultTaskType,
 		StoryPointsFieldID: storyPointsFieldID,
-		EpicLinkFieldID: epicLinkFieldID,
+		EpicLinkFieldID:    epicLinkFieldID,
 	}
 
 	// Preserve existing values if they exist

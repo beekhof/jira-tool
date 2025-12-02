@@ -47,8 +47,8 @@ func TestReadAnswerWithReadline_EditorCommand(t *testing.T) {
 func TestPreviewAndEditLoop_MethodHandling(t *testing.T) {
 	// Test that different methods are handled correctly
 	testCases := []struct {
-		name   string
-		method string
+		name       string
+		method     string
 		shouldSkip bool
 	}{
 		{"readline method", "readline", true},
@@ -70,5 +70,3 @@ func TestPreviewAndEditLoop_MethodHandling(t *testing.T) {
 		})
 	}
 }
-
-

@@ -62,4 +62,3 @@ func TestApplyTicketFilter(t *testing.T) {
 		})
 	}
 }
-

@@ -18,4 +18,3 @@ func ApplyTicketFilter(jql, filter string) string {
 	// Wrap existing query in parentheses and append filter with AND
 	return "(" + jql + ") AND (" + filter + ")"
 }
-

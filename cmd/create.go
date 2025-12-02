@@ -356,10 +356,10 @@ func selectParentTicket(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 			if jira.IsEpic(&issue) {
 				validIssues = append(validIssues, issue)
 			} else {
-			// Check if it has subtasks
-			subtaskJQL := fmt.Sprintf("parent = %s", issue.Key)
-			subtaskJQL = jira.ApplyTicketFilter(subtaskJQL, filter)
-			subtasks, err := client.SearchTickets(subtaskJQL)
+				// Check if it has subtasks
+				subtaskJQL := fmt.Sprintf("parent = %s", issue.Key)
+				subtaskJQL = jira.ApplyTicketFilter(subtaskJQL, filter)
+				subtasks, err := client.SearchTickets(subtaskJQL)
 				if err == nil && len(subtasks) > 0 {
 					validIssues = append(validIssues, issue)
 				}

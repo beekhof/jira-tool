@@ -83,4 +83,3 @@ func TestWorkflowStepString(t *testing.T) {
 		}
 	}
 }
-

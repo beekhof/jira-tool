@@ -191,4 +191,3 @@ func TestStateSaveLoadParentTickets(t *testing.T) {
 		t.Errorf("Expected first ticket 'PROJ-123', got '%s'", loaded.RecentParentTickets[0])
 	}
 }
-

@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	configDir  string
-	noCache    bool
-	filterFlag string
+	configDir    string
+	noCache      bool
+	filterFlag   string
 	noFilterFlag bool
 )
 

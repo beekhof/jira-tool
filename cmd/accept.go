@@ -28,14 +28,14 @@ with decomposed sub-tasks. The ticket will be transitioned to "Done" status.`,
 
 func runAccept(cmd *cobra.Command, args []string) error {
 	configDir := GetConfigDir()
-	
+
 	// Load config first to get default project
 	configPath := config.GetConfigPath(configDir)
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
-	
+
 	ticketID := normalizeTicketID(args[0], cfg.DefaultProject)
 
 	client, err := jira.NewClient(configDir, GetNoCache())

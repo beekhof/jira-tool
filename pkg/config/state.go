@@ -10,10 +10,10 @@ import (
 
 // State holds runtime state data (recent selections)
 type State struct {
-	RecentAssignees     []string `yaml:"recent_assignees,omitempty"`     // Last 6 unique users selected
-	RecentSprints       []string `yaml:"recent_sprints,omitempty"`       // Last 6 unique sprints selected
+	RecentAssignees     []string `yaml:"recent_assignees,omitempty"`      // Last 6 unique users selected
+	RecentSprints       []string `yaml:"recent_sprints,omitempty"`        // Last 6 unique sprints selected
 	RecentReleases      []string `yaml:"recent_releases,omitempty"`       // Last 6 unique releases selected
-	RecentComponents    []string `yaml:"recent_components,omitempty"`    // Last 6 unique components selected
+	RecentComponents    []string `yaml:"recent_components,omitempty"`     // Last 6 unique components selected
 	RecentParentTickets []string `yaml:"recent_parent_tickets,omitempty"` // Last 6 unique parent tickets used
 }
 
@@ -116,4 +116,3 @@ func addToRecentList(list []string, item string, maxSize int) []string {
 
 	return result
 }
-

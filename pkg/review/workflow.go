@@ -490,4 +490,3 @@ func (ts *TicketStatus) IsStepComplete(step WorkflowStep) bool {
 		return false
 	}
 }
-

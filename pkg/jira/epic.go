@@ -53,7 +53,7 @@ func (c *jiraClient) DetectEpicLinkField(projectKey string) (string, error) {
 	for _, field := range fields {
 		fieldNameLower := strings.ToLower(field.Name)
 		fieldTypeLower := strings.ToLower(field.Type)
-		
+
 		if strings.HasPrefix(field.ID, "customfield_") {
 			// Check for "Epic Link" in name
 			if strings.Contains(fieldNameLower, "epic link") {
@@ -156,4 +156,3 @@ func GetChildTickets(client JiraClient, ticketKey string, epicLinkFieldID string
 
 	return childSummaries, nil
 }
-

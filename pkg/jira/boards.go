@@ -54,4 +54,3 @@ func (c *jiraClient) GetBoardsForProject(projectKey string) ([]Board, error) {
 
 	return boardResp.Values, nil
 }
-

@@ -322,4 +322,3 @@ func HandleAssignmentStep(client jira.JiraClient, reader *bufio.Reader, cfg *con
 
 	return true, nil
 }
-

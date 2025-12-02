@@ -17,7 +17,7 @@ var modelsCmd = &cobra.Command{
 
 func runModels(cmd *cobra.Command, args []string) error {
 	configDir := GetConfigDir()
-	
+
 	models, err := gemini.ListModels(configDir)
 	if err != nil {
 		return fmt.Errorf("failed to list models: %w", err)
@@ -25,7 +25,7 @@ func runModels(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("Available Gemini models that support generateContent:")
 	fmt.Println()
-	
+
 	found := false
 	for _, model := range models {
 		for _, method := range model.SupportedMethods {
@@ -39,7 +39,7 @@ func runModels(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}
-	
+
 	if !found {
 		fmt.Println("  No models found that support generateContent")
 	}
@@ -50,4 +50,3 @@ func runModels(cmd *cobra.Command, args []string) error {
 func init() {
 	utilsCmd.AddCommand(modelsCmd)
 }
-

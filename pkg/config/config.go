@@ -10,28 +10,28 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	JiraURL                string   `yaml:"jira_url"`
-	DefaultProject         string   `yaml:"default_project"`
-	DefaultTaskType        string   `yaml:"default_task_type"`
-	GeminiModel            string   `yaml:"gemini_model,omitempty"`
-	MaxQuestions           int      `yaml:"max_questions,omitempty"`
-	QuestionPromptTemplate string   `yaml:"question_prompt_template,omitempty"`
-	DescriptionPromptTemplate string `yaml:"description_prompt_template,omitempty"`
-	SpikeQuestionPromptTemplate string `yaml:"spike_question_prompt_template,omitempty"`
-	SpikePromptTemplate    string   `yaml:"spike_prompt_template,omitempty"`
-	EpicFeatureQuestionPromptTemplate string `yaml:"epic_feature_question_prompt_template,omitempty"`
-	EpicFeaturePromptTemplate string `yaml:"epic_feature_prompt_template,omitempty"`
-	ReviewPageSize         int      `yaml:"review_page_size,omitempty"`
-	StoryPointOptions      []int    `yaml:"story_point_options,omitempty"`
-	StoryPointsFieldID     string   `yaml:"story_points_field_id,omitempty"`
-	DescriptionMinLength   int      `yaml:"description_min_length,omitempty"`   // Minimum description length (default: 128)
-	DescriptionQualityAI   bool     `yaml:"description_quality_ai,omitempty"`   // Enable Gemini AI analysis for description quality (default: false)
-	SeverityFieldID        string   `yaml:"severity_field_id,omitempty"`         // Custom field ID for severity (optional)
-	SeverityValues         []string `yaml:"severity_values,omitempty"`           // List of allowed severity values (optional, used if Jira API doesn't provide them)
-	DefaultBoardID         int      `yaml:"default_board_id,omitempty"`         // Default board ID if auto-detection fails (default: 0)
-	EpicLinkFieldID        string   `yaml:"epic_link_field_id,omitempty"`       // Epic Link custom field ID (auto-detected or manually configured)
-	TicketFilter           string   `yaml:"ticket_filter,omitempty"`            // JQL filter to append to all ticket queries (e.g., "assignee = currentUser()")
-	AnswerInputMethod      string   `yaml:"answer_input_method,omitempty"`      // Answer input method: "readline", "editor", or "readline_with_preview" (default: "readline")
+	JiraURL                           string   `yaml:"jira_url"`
+	DefaultProject                    string   `yaml:"default_project"`
+	DefaultTaskType                   string   `yaml:"default_task_type"`
+	GeminiModel                       string   `yaml:"gemini_model,omitempty"`
+	MaxQuestions                      int      `yaml:"max_questions,omitempty"`
+	QuestionPromptTemplate            string   `yaml:"question_prompt_template,omitempty"`
+	DescriptionPromptTemplate         string   `yaml:"description_prompt_template,omitempty"`
+	SpikeQuestionPromptTemplate       string   `yaml:"spike_question_prompt_template,omitempty"`
+	SpikePromptTemplate               string   `yaml:"spike_prompt_template,omitempty"`
+	EpicFeatureQuestionPromptTemplate string   `yaml:"epic_feature_question_prompt_template,omitempty"`
+	EpicFeaturePromptTemplate         string   `yaml:"epic_feature_prompt_template,omitempty"`
+	ReviewPageSize                    int      `yaml:"review_page_size,omitempty"`
+	StoryPointOptions                 []int    `yaml:"story_point_options,omitempty"`
+	StoryPointsFieldID                string   `yaml:"story_points_field_id,omitempty"`
+	DescriptionMinLength              int      `yaml:"description_min_length,omitempty"` // Minimum description length (default: 128)
+	DescriptionQualityAI              bool     `yaml:"description_quality_ai,omitempty"` // Enable Gemini AI analysis for description quality (default: false)
+	SeverityFieldID                   string   `yaml:"severity_field_id,omitempty"`      // Custom field ID for severity (optional)
+	SeverityValues                    []string `yaml:"severity_values,omitempty"`        // List of allowed severity values (optional, used if Jira API doesn't provide them)
+	DefaultBoardID                    int      `yaml:"default_board_id,omitempty"`       // Default board ID if auto-detection fails (default: 0)
+	EpicLinkFieldID                   string   `yaml:"epic_link_field_id,omitempty"`     // Epic Link custom field ID (auto-detected or manually configured)
+	TicketFilter                      string   `yaml:"ticket_filter,omitempty"`          // JQL filter to append to all ticket queries (e.g., "assignee = currentUser()")
+	AnswerInputMethod                 string   `yaml:"answer_input_method,omitempty"`    // Answer input method: "readline", "editor", or "readline_with_preview" (default: "readline")
 }
 
 // GetConfigPath returns the path for the config file
