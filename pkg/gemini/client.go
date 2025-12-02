@@ -651,7 +651,10 @@ func (c *geminiClient) generateContentOnce(prompt string) (string, error) {
 				Status  string `json:"status"`
 			} `json:"error"`
 		}
-		_ = json.Unmarshal(body, &apiError) // Try to parse error response, but continue even if it fails
+		// Try to parse error response, but continue even if it fails
+		if unmarshalErr := json.Unmarshal(body, &apiError); unmarshalErr == nil {
+			_ = apiError // Use parsed error if available
+		}
 		// If unmarshal failed, we'll use the generic error below
 
 		// Provide user-friendly error messages
