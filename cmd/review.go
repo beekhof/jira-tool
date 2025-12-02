@@ -143,8 +143,8 @@ func runReview(cmd *cobra.Command, args []string) error {
 		pageSize = len(issues)
 	}
 
-	reader := bufio.NewReader(os.Stdin)
-
+	// Track selected tickets
+	selected := make(map[string]bool)
 	// Track acted-on tickets
 	actedOn := make(map[string]bool)
 
@@ -162,8 +162,16 @@ func runReview(cmd *cobra.Command, args []string) error {
 
 		pageIssues := issues[start:end]
 
+		// Count selected tickets
+		selectedCount := 0
+		for _, v := range selected {
+			if v {
+				selectedCount++
+			}
+		}
+
 		// Display page header
-		fmt.Printf("\n=== Page %d of %d (%d tickets) ===\n\n", currentPage+1, totalPages, len(issues))
+		fmt.Printf("\n=== Page %d of %d (%d tickets, %d selected) ===\n\n", currentPage+1, totalPages, len(issues), selectedCount)
 
 		// Display tickets in a table format
 		fmt.Printf("%-4s %-12s %-10s %-50s %-12s %-20s %-8s\n", "#", "Key", "Type", "Summary", "Priority", "Assignee", "Status")
@@ -192,10 +200,12 @@ func runReview(cmd *cobra.Command, args []string) error {
 				summary = summary[:45] + "..."
 			}
 
-			// Mark if acted on
+			// Mark if selected or acted on
 			marker := ""
-			if actedOn[issue.Key] {
+			if selected[issue.Key] {
 				marker = "✓ "
+			} else if actedOn[issue.Key] {
+				marker = "• "
 			}
 
 			fmt.Printf("%-4d %-12s %-10s %-50s %-12s %-20s %-8s %s\n",
@@ -203,7 +213,7 @@ func runReview(cmd *cobra.Command, args []string) error {
 		}
 
 		fmt.Println()
-		fmt.Printf("Actions: [1-%d] select ticket | [n]ext | [p]rev | [q]uit\n", len(pageIssues))
+		fmt.Printf("Actions: [1-%d] toggle ticket | [m]ark all | [u]nmark all | [r]eview selected | [n]ext | [p]rev | [q]uit\n", len(pageIssues))
 		fmt.Print("> ")
 
 		// Read user input
@@ -236,10 +246,43 @@ func runReview(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 
+		if input == "m" || input == "mark all" {
+			// Mark all tickets on current page
+			for _, issue := range pageIssues {
+				selected[issue.Key] = true
+			}
+			fmt.Printf("Marked %d tickets on this page.\n", len(pageIssues))
+			continue
+		}
+
+		if input == "u" || input == "unmark all" {
+			// Unmark all tickets on current page
+			for _, issue := range pageIssues {
+				selected[issue.Key] = false
+			}
+			fmt.Printf("Unmarked %d tickets on this page.\n", len(pageIssues))
+			continue
+		}
+
+		if input == "r" || input == "review" {
+			// Count selected tickets
+			selectedCount := 0
+			for _, v := range selected {
+				if v {
+					selectedCount++
+				}
+			}
+			if selectedCount == 0 {
+				fmt.Println("No tickets selected. Select tickets first.")
+				continue
+			}
+			return reviewSelectedTickets(client, geminiClient, reader, cfg, issues, selected, actedOn, configDir)
+		}
+
 		// Try to parse as ticket number
 		ticketNum, err := strconv.Atoi(input)
 		if err != nil {
-			fmt.Println("Invalid input. Please enter a ticket number, 'n' for next, 'p' for prev, or 'q' to quit.")
+			fmt.Println("Invalid input. Please enter a ticket number, action, or 'q' to quit.")
 			continue
 		}
 
@@ -249,26 +292,54 @@ func runReview(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		// Get the selected ticket
+		// Toggle selection
 		selectedIssue := issues[ticketNum-1]
-
-		// Run guided workflow
-		configDir := GetConfigDir()
-		geminiClient, err := gemini.NewClient(configDir)
-		if err != nil {
-			fmt.Printf("Warning: Could not initialize Gemini client: %v\n", err)
-			fmt.Println("Continuing without AI features...")
-			geminiClient = nil
-		}
-
-		if err := review.ProcessTicketWorkflow(client, geminiClient, reader, cfg, selectedIssue, configDir); err != nil {
-			fmt.Printf("Error in workflow: %v\n", err)
+		selected[selectedIssue.Key] = !selected[selectedIssue.Key]
+		if selected[selectedIssue.Key] {
+			fmt.Printf("Selected %s\n", selectedIssue.Key)
 		} else {
-			// Mark as acted on
-			actedOn[selectedIssue.Key] = true
+			fmt.Printf("Deselected %s\n", selectedIssue.Key)
 		}
-		// Continue outer loop to show list again
 	}
+}
+
+// reviewSelectedTickets processes each selected ticket through the guided workflow
+func reviewSelectedTickets(client jira.JiraClient, geminiClient gemini.GeminiClient, reader *bufio.Reader, cfg *config.Config, allIssues []jira.Issue, selected map[string]bool, actedOn map[string]bool, configDir string) error {
+	// Get list of selected tickets
+	selectedTickets := []jira.Issue{}
+	for _, issue := range allIssues {
+		if selected[issue.Key] {
+			selectedTickets = append(selectedTickets, issue)
+		}
+	}
+
+	if len(selectedTickets) == 0 {
+		return fmt.Errorf("no tickets selected")
+	}
+
+	fmt.Printf("\nReviewing %d ticket(s)...\n\n", len(selectedTickets))
+
+	for i, ticket := range selectedTickets {
+		fmt.Printf("=== [%d/%d] %s - %s ===\n", i+1, len(selectedTickets), ticket.Key, ticket.Fields.Summary)
+
+		if err := review.ProcessTicketWorkflow(client, geminiClient, reader, cfg, ticket, configDir); err != nil {
+			fmt.Printf("Error in workflow for %s: %v\n", ticket.Key, err)
+			fmt.Print("Continue with next ticket? [Y/n] ")
+			response, _ := reader.ReadString('\n')
+			response = strings.TrimSpace(strings.ToLower(response))
+			if response == "n" || response == "no" {
+				return fmt.Errorf("review cancelled")
+			}
+			continue
+		}
+
+		// Mark as acted on and clear selection
+		actedOn[ticket.Key] = true
+		selected[ticket.Key] = false
+		fmt.Printf("✓ Completed review for %s\n\n", ticket.Key)
+	}
+
+	return nil
 }
 
 // handleReviewAction shows the action menu for a ticket and handles the selected action
