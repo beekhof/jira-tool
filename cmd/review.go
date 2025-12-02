@@ -117,7 +117,8 @@ func runReview(cmd *cobra.Command, args []string) error {
 		selectedIssue := issues[0]
 
 		// Initialize Gemini client
-		geminiClient, err := gemini.NewClient(configDir)
+		var geminiClient gemini.GeminiClient
+		geminiClient, err = gemini.NewClient(configDir)
 		if err != nil {
 			fmt.Printf("Warning: Could not initialize Gemini client: %v\n", err)
 			fmt.Println("Continuing without AI features...")
