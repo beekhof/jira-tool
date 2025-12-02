@@ -143,6 +143,17 @@ func runReview(cmd *cobra.Command, args []string) error {
 		pageSize = len(issues)
 	}
 
+	reader := bufio.NewReader(os.Stdin)
+	configDir := GetConfigDir()
+
+	// Initialize Gemini client
+	geminiClient, err := gemini.NewClient(configDir)
+	if err != nil {
+		fmt.Printf("Warning: Could not initialize Gemini client: %v\n", err)
+		fmt.Println("Continuing without AI features...")
+		geminiClient = nil
+	}
+
 	// Track selected tickets
 	selected := make(map[string]bool)
 	// Track acted-on tickets
