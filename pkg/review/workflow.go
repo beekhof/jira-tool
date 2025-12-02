@@ -173,7 +173,9 @@ func InitializeStatusFromTicket(client jira.JiraClient, ticket jira.Issue, cfg *
 	}
 
 	// Check Assignment
-	if ticket.Fields.Assignee.DisplayName != "" || ticket.Fields.Assignee.AccountID != "" || ticket.Fields.Assignee.Name != "" {
+	if ticket.Fields.Assignee.DisplayName != "" ||
+		ticket.Fields.Assignee.AccountID != "" ||
+		ticket.Fields.Assignee.Name != "" {
 		status.AssignmentComplete = true
 	}
 
@@ -297,14 +299,20 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 					response = strings.TrimSpace(strings.ToLower(response))
 					if response == "" || response == "y" || response == "yes" {
 						// Get existing description
-						existingDesc, _ := client.GetTicketDescription(ticket.Key)
+						existingDesc, err := client.GetTicketDescription(ticket.Key)
+						if err != nil {
+							existingDesc = "" // Continue with empty description if unavailable
+						}
 						// Run Q&A flow (pass issueTypeName for Epic/Feature detection, include child tickets in context)
 						issueTypeName := ticket.Fields.IssueType.Name
 						answerInputMethod := cfg.AnswerInputMethod
 						if answerInputMethod == "" {
 							answerInputMethod = "readline"
 						}
-						description, err := qa.RunQnAFlow(geminiClient, ticket.Fields.Summary, cfg.MaxQuestions, ticket.Fields.Summary, issueTypeName, existingDesc, client, ticket.Key, cfg.EpicLinkFieldID, answerInputMethod)
+						description, err := qa.RunQnAFlow(
+							geminiClient, ticket.Fields.Summary, cfg.MaxQuestions,
+							ticket.Fields.Summary, issueTypeName, existingDesc,
+							client, ticket.Key, cfg.EpicLinkFieldID, answerInputMethod)
 						if err != nil {
 							return false, err
 						}
@@ -412,7 +420,9 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 
 		if stepInfo.step == StepAssignment {
 			// Check if ticket is already assigned
-			if ticket.Fields.Assignee.DisplayName != "" || ticket.Fields.Assignee.AccountID != "" || ticket.Fields.Assignee.Name != "" {
+			if ticket.Fields.Assignee.DisplayName != "" ||
+				ticket.Fields.Assignee.AccountID != "" ||
+				ticket.Fields.Assignee.Name != "" {
 				// Already assigned, mark as complete and skip
 				status.MarkComplete(StepAssignment)
 				continue

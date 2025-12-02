@@ -306,7 +306,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Prompt for severity values if severity field is configured
 	if cfg.SeverityFieldID != "" {
-		fmt.Print("\nSeverity values (comma-separated, e.g., 'Low,Medium,High,Critical' or 'skip' to use Jira API values only): ")
+		fmt.Print("\nSeverity values (comma-separated, e.g., 'Low,Medium,High,Critical' " +
+			"or 'skip' to use Jira API values only): ")
 		severityValuesInput, err := reader.ReadString('\n')
 		if err == nil {
 			severityValuesInput = strings.TrimSpace(severityValuesInput)

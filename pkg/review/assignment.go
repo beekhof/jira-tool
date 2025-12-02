@@ -14,7 +14,9 @@ import (
 // HandleAssignmentStep handles ticket assignment with auto-actions (transition, sprint, release)
 func HandleAssignmentStep(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticket jira.Issue, configDir string) (bool, error) {
 	// Check if ticket is already assigned
-	if ticket.Fields.Assignee.DisplayName != "" || ticket.Fields.Assignee.AccountID != "" || ticket.Fields.Assignee.Name != "" {
+	if ticket.Fields.Assignee.DisplayName != "" ||
+		ticket.Fields.Assignee.AccountID != "" ||
+		ticket.Fields.Assignee.Name != "" {
 		return true, nil // Already assigned
 	}
 
@@ -160,8 +162,14 @@ func HandleAssignmentStep(client jira.JiraClient, reader *bufio.Reader, cfg *con
 		boardID, err := SelectBoard(client, reader, cfg, projectKey)
 		if err == nil {
 			// Get active and planned sprints
-			activeSprints, _ := client.GetActiveSprints(boardID)
-			plannedSprints, _ := client.GetPlannedSprints(boardID)
+			activeSprints, sprintErr := client.GetActiveSprints(boardID)
+			if sprintErr != nil {
+				activeSprints = []jira.SprintParsed{} // Continue with empty list if fails
+			}
+			plannedSprints, sprintErr := client.GetPlannedSprints(boardID)
+			if sprintErr != nil {
+				plannedSprints = []jira.SprintParsed{} // Continue with empty list if fails
+			}
 
 			allSprints := append(activeSprints, plannedSprints...)
 			if len(allSprints) > 0 {

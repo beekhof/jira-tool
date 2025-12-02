@@ -489,7 +489,9 @@ func runSpikesStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println("---")
 
 	// Print by status
-	statusOrder := []string{"New", "To Do", "Open", "Backlog", "In Progress", "In Review", "Review", "Done", "Closed", "Resolved"}
+	statusOrder := []string{
+		"New", "To Do", "Open", "Backlog", "In Progress", "In Review",
+		"Review", "Done", "Closed", "Resolved"}
 	for _, statusName := range statusOrder {
 		if issues, ok := statusGroups[statusName]; ok {
 			var points float64

@@ -314,7 +314,9 @@ func (c *jiraClient) UpdateTicketPoints(ticketID string, points int) error {
 			}
 			// If parsing failed, check if it's a custom field issue
 			if strings.Contains(bodyStr, "customfield") || strings.Contains(bodyStr, "field") {
-				return fmt.Errorf("Jira API error: %d %s - %s\nNote: The story points field ID (%s) may be incorrect for your Jira instance. You can configure it in your config file with 'story_points_field_id'.", resp.StatusCode, resp.Status, bodyStr, c.storyPointsFieldID)
+				return fmt.Errorf(
+					"Jira API error: %d %s - %s\nNote: The story points field ID (%s) may be incorrect for your Jira instance. You can configure it in your config file with 'story_points_field_id'.",
+					resp.StatusCode, resp.Status, bodyStr, c.storyPointsFieldID)
 			}
 			return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
 		}
@@ -502,7 +504,8 @@ func (c *jiraClient) CreateTicketWithParent(project, taskType, summary, parentKe
 }
 
 // CreateTicketWithEpicLink creates a new Jira ticket with Epic Link field
-func (c *jiraClient) CreateTicketWithEpicLink(project, taskType, summary, epicKey, epicLinkFieldID string) (string, error) {
+func (c *jiraClient) CreateTicketWithEpicLink(
+	project, taskType, summary, epicKey, epicLinkFieldID string) (string, error) {
 	endpoint := fmt.Sprintf("%s/rest/api/2/issue", c.baseURL)
 
 	// Construct the JSON payload
@@ -1189,7 +1192,9 @@ func (c *jiraClient) SearchUsers(query string) ([]User, error) {
 	// Helper function to check if response is HTML
 	isHTML := func(data []byte) bool {
 		dataStr := strings.TrimSpace(string(data))
-		return strings.HasPrefix(dataStr, "<!DOCTYPE") || strings.HasPrefix(dataStr, "<html") || strings.HasPrefix(dataStr, "<HTML")
+		return strings.HasPrefix(dataStr, "<!DOCTYPE") ||
+			strings.HasPrefix(dataStr, "<html") ||
+			strings.HasPrefix(dataStr, "<HTML")
 	}
 
 	// Try API v2 first (more widely supported), then v3 as fallback
@@ -1251,7 +1256,9 @@ func (c *jiraClient) SearchUsers(query string) ([]User, error) {
 							if len(body) < previewLen {
 								previewLen = len(body)
 							}
-							return nil, fmt.Errorf("both API v2 and v3 returned HTML (endpoints may not exist). v2 response: %s", string(body[:previewLen]))
+							return nil, fmt.Errorf(
+								"both API v2 and v3 returned HTML (endpoints may not exist). v2 response: %s",
+								string(body[:previewLen]))
 						}
 					}
 				}
@@ -1270,7 +1277,9 @@ func (c *jiraClient) SearchUsers(query string) ([]User, error) {
 			if len(bodyStr) < previewLen {
 				previewLen = len(bodyStr)
 			}
-			return nil, fmt.Errorf("Jira API returned HTML instead of JSON (endpoint may not exist). Response preview: %s", bodyStr[:previewLen])
+			return nil, fmt.Errorf(
+				"Jira API returned HTML instead of JSON (endpoint may not exist). Response preview: %s",
+				bodyStr[:previewLen])
 		}
 		if bodyStr != "" && len(bodyStr) < 500 {
 			return nil, fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
@@ -1284,7 +1293,9 @@ func (c *jiraClient) SearchUsers(query string) ([]User, error) {
 		if len(body) < previewLen {
 			previewLen = len(body)
 		}
-		return nil, fmt.Errorf("Jira API returned HTML instead of JSON. The user search endpoint may not be available. Response preview: %s", string(body[:previewLen]))
+		return nil, fmt.Errorf(
+			"Jira API returned HTML instead of JSON. The user search endpoint may not be available. Response preview: %s",
+			string(body[:previewLen]))
 	}
 	// Debug: print raw response for first 500 chars if accountId extraction fails
 	var users []User
@@ -1402,7 +1413,9 @@ func (c *jiraClient) AssignTicket(ticketID, userAccountID, userName string) erro
 
 								if resp2.StatusCode >= 200 && resp2.StatusCode < 300 {
 									// Check if body contains error messages even with success status
-									if bodyStr2 != "" && (strings.Contains(bodyStr2, "\"errorMessages\"") || strings.Contains(bodyStr2, "\"errors\"")) {
+									if bodyStr2 != "" &&
+										(strings.Contains(bodyStr2, "\"errorMessages\"") ||
+											strings.Contains(bodyStr2, "\"errors\"")) {
 										// Try to parse as error
 										var apiError2 struct {
 											ErrorMessages []string          `json:"errorMessages"`
@@ -1415,7 +1428,9 @@ func (c *jiraClient) AssignTicket(ticketID, userAccountID, userName string) erro
 												for k, v := range apiError2.Errors {
 													errorMsgs = append(errorMsgs, fmt.Sprintf("%s: %s", k, v))
 												}
-												return fmt.Errorf("Jira API returned error in response body: %s\nAccount ID used: %s", strings.Join(errorMsgs, "; "), userAccountID)
+												return fmt.Errorf(
+													"Jira API returned error in response body: %s\nAccount ID used: %s",
+													strings.Join(errorMsgs, "; "), userAccountID)
 											}
 										}
 									}
@@ -1481,7 +1496,9 @@ func (c *jiraClient) AssignTicket(ticketID, userAccountID, userName string) erro
 					for k, v := range apiError.Errors {
 						errorMsgs = append(errorMsgs, fmt.Sprintf("%s: %s", k, v))
 					}
-					return fmt.Errorf("Jira API returned error in response body: %s\nAccount ID used: %s", strings.Join(errorMsgs, "; "), userAccountID)
+					return fmt.Errorf(
+						"Jira API returned error in response body: %s\nAccount ID used: %s",
+						strings.Join(errorMsgs, "; "), userAccountID)
 				}
 			}
 		}

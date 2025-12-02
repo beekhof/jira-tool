@@ -255,7 +255,10 @@ func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *conf
 			fmt.Println("  - Component name might be different in Jira")
 			fmt.Println("\nTip: Try running with --no-cache flag to ensure fresh data:")
 			fmt.Printf("  jira review %s --no-cache\n", ticket.Key)
-			return false, fmt.Errorf("component '%s' not found in project %s even after refreshing. Please verify the component name and ensure it exists in the project", searchInput, projectKey)
+			return false, fmt.Errorf(
+				"component '%s' not found in project %s even after refreshing. "+
+					"Please verify the component name and ensure it exists in the project",
+				searchInput, projectKey)
 		}
 
 		// Show matching components
@@ -290,7 +293,7 @@ func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *conf
 		}
 
 		if matchSelected == len(matchingComponents)+1 {
-			return false, nil // User cancelled
+			return false, nil // User canceled
 		}
 
 		if matchSelected < 1 || matchSelected > len(matchingComponents) {
@@ -480,7 +483,10 @@ func HandleStoryPointsStep(client jira.JiraClient, geminiClient gemini.GeminiCli
 	}
 
 	// Get description for AI estimate
-	description, _ := client.GetTicketDescription(ticket.Key)
+	description, err := client.GetTicketDescription(ticket.Key)
+	if err != nil {
+		description = "" // Continue with empty description if unavailable
+	}
 
 	// Get AI suggestion
 	options := []int{1, 2, 3, 5, 8, 13}

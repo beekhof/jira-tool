@@ -76,7 +76,10 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get existing description if available
-	existingDesc, _ := client.GetTicketDescription(ticketID)
+	existingDesc, err := client.GetTicketDescription(ticketID)
+	if err != nil {
+		existingDesc = "" // Continue with empty description if unavailable
+	}
 
 	// Run Q&A flow
 	answerInputMethod := cfg.AnswerInputMethod
@@ -88,7 +91,9 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 	fmt.Println("Answer the questions below to help generate a comprehensive description.")
 	fmt.Println()
 
-	description, err := qa.RunQnAFlow(geminiClient, ticketSummary, cfg.MaxQuestions, ticketSummary, issueTypeName, existingDesc, client, ticketID, cfg.EpicLinkFieldID, answerInputMethod)
+	description, err := qa.RunQnAFlow(
+		geminiClient, ticketSummary, cfg.MaxQuestions, ticketSummary, issueTypeName,
+		existingDesc, client, ticketID, cfg.EpicLinkFieldID, answerInputMethod)
 	if err != nil {
 		return fmt.Errorf("failed to generate description: %w", err)
 	}

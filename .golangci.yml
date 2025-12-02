@@ -1,10 +1,6 @@
 run:
   timeout: 5m
   tests: true
-  skip-dirs:
-    - vendor
-  skip-files:
-    - ".*\\.pb\\.go$"
 
 linters-settings:
   errcheck:
@@ -30,10 +26,6 @@ linters-settings:
     min-complexity: 15
   goimports:
     local-prefixes: go-jira-helper
-  golint:
-    min-confidence: 0
-  govet:
-    check-shadowing: true
   lll:
     line-length: 120
   maligned:
@@ -45,6 +37,8 @@ linters-settings:
     allow-unused: false
     require-explanation: false
     require-specific: false
+  govet:
+    shadow: true
 
 linters:
   disable-all: true
@@ -55,7 +49,6 @@ linters:
     - gocyclo
     - gofmt
     - goimports
-    - golint
     - gosec
     - gosimple
     - govet
@@ -67,7 +60,7 @@ linters:
     - unconvert
     - unparam
     - unused
-    - varcheck
+    - revive
     - whitespace
 
 issues:
@@ -79,4 +72,8 @@ issues:
         - gocyclo
   max-issues-per-linter: 0
   max-same-issues: 0
+  exclude-files:
+    - ".*\\.pb\\.go$"
+  exclude-dirs:
+    - vendor
 

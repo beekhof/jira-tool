@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/beekhof/jira-tool/pkg/config"
@@ -11,7 +12,6 @@ import (
 	"github.com/beekhof/jira-tool/pkg/gemini"
 	"github.com/beekhof/jira-tool/pkg/jira"
 	"github.com/beekhof/jira-tool/pkg/qa"
-	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -128,7 +128,8 @@ func runCreate(cmd *cobra.Command, args []string) error {
 				}
 				if epicLinkFieldID == "" {
 					// Prompt user for field ID
-					fmt.Print("Epic Link field not detected. Please enter the custom field ID (e.g., customfield_10011) or press Enter to skip: ")
+					fmt.Print("Epic Link field not detected. " +
+						"Please enter the custom field ID (e.g., customfield_10011) or press Enter to skip: ")
 					fieldIDInput, err := reader.ReadString('\n')
 					if err != nil {
 						return fmt.Errorf("failed to read input: %w", err)
@@ -223,12 +224,16 @@ func runCreate(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		// Run Q&A flow (pass summary to detect spike based on SPIKE prefix, pass taskType as issueTypeName, no existing description for new tickets, include child tickets in context)
+		// Run Q&A flow (pass summary to detect spike based on SPIKE prefix,
+		// pass taskType as issueTypeName, no existing description for new tickets,
+		// include child tickets in context)
 		answerInputMethod := cfg.AnswerInputMethod
 		if answerInputMethod == "" {
 			answerInputMethod = "readline"
 		}
-		description, err := qa.RunQnAFlow(geminiClient, summary, cfg.MaxQuestions, summary, taskType, "", client, ticketKey, cfg.EpicLinkFieldID, answerInputMethod)
+		description, err := qa.RunQnAFlow(
+			geminiClient, summary, cfg.MaxQuestions, summary, taskType, "",
+			client, ticketKey, cfg.EpicLinkFieldID, answerInputMethod)
 		if err != nil {
 			return err
 		}

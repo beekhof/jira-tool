@@ -8,8 +8,10 @@ import (
 	"strings"
 
 	"github.com/beekhof/jira-tool/pkg/config"
+	"github.com/beekhof/jira-tool/pkg/editor"
 	"github.com/beekhof/jira-tool/pkg/gemini"
 	"github.com/beekhof/jira-tool/pkg/jira"
+	"github.com/beekhof/jira-tool/pkg/qa"
 	"github.com/beekhof/jira-tool/pkg/review"
 
 	"github.com/spf13/cobra"
@@ -180,10 +182,12 @@ func runReview(cmd *cobra.Command, args []string) error {
 		}
 
 		// Display page header
-		fmt.Printf("\n=== Page %d of %d (%d tickets, %d selected) ===\n\n", currentPage+1, totalPages, len(issues), selectedCount)
+		fmt.Printf("\n=== Page %d of %d (%d tickets, %d selected) ===\n\n",
+			currentPage+1, totalPages, len(issues), selectedCount)
 
 		// Display tickets in a table format
-		fmt.Printf("%-4s %-12s %-10s %-50s %-12s %-20s %-8s\n", "#", "Key", "Type", "Summary", "Priority", "Assignee", "Status")
+		fmt.Printf("%-4s %-12s %-10s %-50s %-12s %-20s %-8s\n",
+			"#", "Key", "Type", "Summary", "Priority", "Assignee", "Status")
 		fmt.Println(strings.Repeat("-", 120))
 
 		for i, issue := range pageIssues {
@@ -222,7 +226,8 @@ func runReview(cmd *cobra.Command, args []string) error {
 		}
 
 		fmt.Println()
-		fmt.Printf("Actions: [1-%d] toggle ticket | [m]ark all | [u]nmark all | [r]eview selected | [n]ext | [p]rev | [q]uit\n", len(pageIssues))
+		fmt.Printf("Actions: [1-%d] toggle ticket | [m]ark all | [u]nmark all | "+
+			"[r]eview selected | [n]ext | [p]rev | [q]uit\n", len(pageIssues))
 		fmt.Print("> ")
 
 		// Read user input
@@ -343,10 +348,13 @@ func reviewSelectedTickets(client jira.JiraClient, geminiClient gemini.GeminiCli
 		if err := review.ProcessTicketWorkflow(client, geminiClient, reader, cfg, ticket, configDir); err != nil {
 			fmt.Printf("Error in workflow for %s: %v\n", ticket.Key, err)
 			fmt.Print("Continue with next ticket? [Y/n] ")
-			response, _ := reader.ReadString('\n')
+			response, readErr := reader.ReadString('\n')
+			if readErr != nil {
+				return fmt.Errorf("failed to read response: %w", readErr)
+			}
 			response = strings.TrimSpace(strings.ToLower(response))
 			if response == "n" || response == "no" {
-				return fmt.Errorf("review cancelled")
+				return fmt.Errorf("review canceled")
 			}
 			continue
 		}
@@ -358,6 +366,91 @@ func reviewSelectedTickets(client jira.JiraClient, geminiClient gemini.GeminiCli
 	}
 
 	return nil
+}
+
+// handleReviewAction shows the action menu for a ticket and handles the selected action
+// Returns (shouldContinue, success) - shouldContinue indicates if we should go back to the list
+func handleReviewAction(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, selectedIssue jira.Issue, issues []jira.Issue, issueIndex int) (bool, bool) {
+	// Get config path for saving recent selections
+	configDir := GetConfigDir()
+	configPath := config.GetConfigPath(configDir)
+
+	// Show ticket details and action menu
+	fmt.Printf("\nSelected: %s - %s\n", selectedIssue.Key, selectedIssue.Fields.Summary)
+	fmt.Printf("Priority: %s | Assignee: %s | Status: %s\n",
+		getPriorityName(selectedIssue), getAssigneeName(selectedIssue), selectedIssue.Fields.Status.Name)
+
+	// For single ticket, don't show "back" option
+	if len(issues) == 1 {
+		fmt.Print("Action? [a(ssign), t(riage), d(etail), e(stimate), q(uit)] > ")
+	} else {
+		fmt.Print("Action? [a(ssign), t(riage), d(etail), e(stimate), b(ack)] > ")
+	}
+
+	action, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Printf("Error reading input: %v\n", err)
+		return true, false
+	}
+	action = strings.TrimSpace(strings.ToLower(action))
+
+	success := false
+	switch action {
+	case "a", "assign":
+		if err := handleAssign(client, reader, cfg, selectedIssue.Key, configPath); err != nil {
+			fmt.Printf("Error assigning ticket: %v\n", err)
+		} else {
+			success = true
+			fmt.Println("Ticket assigned successfully.")
+		}
+	case "t", "triage":
+		if err := handleTriage(client, reader, selectedIssue.Key); err != nil {
+			fmt.Printf("Error triaging ticket: %v\n", err)
+		} else {
+			success = true
+			fmt.Println("Ticket triaged successfully.")
+		}
+	case "d", "detail":
+		if err := handleDetail(client, reader, selectedIssue.Key, selectedIssue.Fields.Summary); err != nil {
+			fmt.Printf("Error adding detail: %v\n", err)
+		} else {
+			success = true
+			fmt.Println("Description updated successfully.")
+		}
+	case "e", "estimate":
+		if err := handleEstimate(client, reader, cfg, selectedIssue.Key); err != nil {
+			fmt.Printf("Error estimating ticket: %v\n", err)
+		} else {
+			success = true
+			fmt.Println("Story points updated successfully.")
+		}
+	case "b", "back":
+		// Just go back to the list
+		return true, false
+	case "q", "quit":
+		// Quit (only shown for single ticket)
+		return false, false
+	default:
+		fmt.Println("Invalid action.")
+		// For single ticket, continue loop; for multiple, go back to list
+		return len(issues) == 1, false
+	}
+
+	// Refresh the ticket data to show updated info
+	if success && issueIndex >= 0 && issueIndex < len(issues) {
+		filter := GetTicketFilter(cfg)
+		refreshJQL := fmt.Sprintf("key = %s", selectedIssue.Key)
+		refreshJQL = jira.ApplyTicketFilter(refreshJQL, filter)
+		updated, err := client.SearchTickets(refreshJQL)
+		if err == nil && len(updated) > 0 {
+			issues[issueIndex] = updated[0]
+		}
+	}
+
+	// For single ticket, continue loop to allow multiple actions (return true)
+	// For multiple tickets, go back to list (return false, but outer loop continues anyway)
+	// shouldContinue=false means quit (only for single ticket)
+	return len(issues) == 1, success
 }
 
 // Helper functions to safely get priority and assignee names
@@ -509,6 +602,87 @@ func handleTriage(client jira.JiraClient, reader *bufio.Reader, ticketID string)
 	}
 
 	return client.UpdateTicketPriority(ticketID, priorities[selected-1].ID)
+}
+
+// handleDetail is unused - keeping for potential future use
+// Use 'jira-tool describe' command instead
+//
+//nolint:unused
+func handleDetail(client jira.JiraClient, reader *bufio.Reader, ticketID, summary string) error {
+	configDir := GetConfigDir()
+
+	// Load config to get max questions
+	configPath := config.GetConfigPath(configDir)
+	cfg, err := config.LoadConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Get ticket filter
+	filter := GetTicketFilter(cfg)
+
+	// Get ticket details to check for spike (need summary and key)
+	jql := fmt.Sprintf("key = %s", ticketID)
+	jql = jira.ApplyTicketFilter(jql, filter)
+	issues, err := client.SearchTickets(jql)
+	if err != nil {
+		return fmt.Errorf("failed to get ticket details: %w", err)
+	}
+	if len(issues) == 0 {
+		return fmt.Errorf("ticket %s not found", ticketID)
+	}
+	ticketSummary := issues[0].Fields.Summary
+	issueTypeName := issues[0].Fields.IssueType.Name
+
+	geminiClient, err := gemini.NewClient(configDir)
+	if err != nil {
+		return err
+	}
+
+	// Run Q&A flow (pass summary to detect spike based on SPIKE prefix,
+	// pass issueTypeName for Epic/Feature detection, include child tickets in context)
+	// Get existing description if available
+	existingDesc, err := client.GetTicketDescription(ticketID)
+	if err != nil {
+		existingDesc = "" // Continue with empty description if unavailable
+	}
+	answerInputMethod := cfg.AnswerInputMethod
+	if answerInputMethod == "" {
+		answerInputMethod = "readline"
+	}
+	description, err := qa.RunQnAFlow(
+		geminiClient, summary, cfg.MaxQuestions, ticketSummary, issueTypeName,
+		existingDesc, client, ticketID, cfg.EpicLinkFieldID, answerInputMethod)
+	if err != nil {
+		return err
+	}
+
+	// Print and ask for confirmation
+	fmt.Println("\nGenerated description:")
+	fmt.Println("---")
+	fmt.Println(description)
+	fmt.Println("---")
+	fmt.Print("\nUpdate ticket with this description? [Y/n/e(dit)] ")
+
+	confirm, err := reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	confirm = strings.TrimSpace(strings.ToLower(confirm))
+
+	if confirm == "e" || confirm == "edit" {
+		editedDescription, err := editor.OpenInEditor(description)
+		if err != nil {
+			return fmt.Errorf("failed to edit description: %w", err)
+		}
+		description = editedDescription
+	}
+
+	if confirm != "n" && confirm != "no" {
+		return client.UpdateTicketDescription(ticketID, description)
+	}
+
+	return nil
 }
 
 func handleEstimate(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticketID string) error {

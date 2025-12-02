@@ -86,6 +86,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&configDir, "config-dir", "", "Configuration directory (default: ~/.jira-tool)")
 	rootCmd.PersistentFlags().BoolVar(&noCache, "no-cache", false, "Bypass cache and fetch fresh data from API")
 	rootCmd.PersistentFlags().StringVar(&filterFlag, "filter", "", "JQL filter to append to all ticket queries")
-	rootCmd.PersistentFlags().BoolVar(&noFilterFlag, "no-filter", false, "Bypass ticket filter (overrides --filter and config)")
+	rootCmd.PersistentFlags().BoolVar(&noFilterFlag, "no-filter", false,
+		"Bypass ticket filter (overrides --filter and config)")
 	// Commands register themselves in their own init() functions
 }

@@ -12,11 +12,13 @@ import (
 // It asks up to maxQuestions questions and then generates a final description
 // If maxQuestions is 0 or negative, defaults to 4
 // summaryOrKey is used to detect spikes (tickets with "SPIKE" prefix) and select the appropriate prompt template
-// issueTypeName is the Jira issue type name (e.g., "Epic", "Feature", "Task") used to select the appropriate prompt template
+// issueTypeName is the Jira issue type name (e.g., "Epic", "Feature", "Task")
+// used to select the appropriate prompt template
 // existingDescription is included in the context if provided (for improving existing descriptions)
 // jiraClient and ticketKey are optional - if provided, child ticket summaries will be included in context
 // epicLinkFieldID is optional - required for Epic tickets to fetch epic children
-// answerInputMethod controls how answers are input: "readline", "editor", or "readline_with_preview" (default: "readline_with_preview")
+// answerInputMethod controls how answers are input: "readline", "editor", or
+// "readline_with_preview" (default: "readline_with_preview")
 //
 // Users can reject poor questions by entering "reject" or an empty string.
 // Rejected questions are skipped, a new question is generated, and the flow continues.
@@ -38,7 +40,9 @@ func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions 
 	// Include existing description in context if provided
 	enhancedContext := initialContext
 	if existingDescription != "" {
-		enhancedContext = fmt.Sprintf("%s\n\nExisting description: %s\n\nImprove or expand this description based on the following questions:", initialContext, existingDescription)
+		enhancedContext = fmt.Sprintf(
+			"%s\n\nExisting description: %s\n\nImprove or expand this description based on the following questions:",
+			initialContext, existingDescription)
 	}
 
 	// Include child ticket summaries in context if available
@@ -118,7 +122,8 @@ func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions 
 	}
 
 	// Add footer to the description
-	footer := "\n\n---\n\n_This description was generated based on human answers to a limited number of robot questions related to the summary._"
+	footer := "\n\n---\n\n_This description was generated based on human answers to a " +
+		"limited number of robot questions related to the summary._"
 	description = description + footer
 
 	return description, nil

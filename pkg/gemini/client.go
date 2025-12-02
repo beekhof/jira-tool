@@ -145,8 +145,10 @@ func NewClient(configDir string) (GeminiClient, error) {
 	}
 
 	return &geminiClient{
-		apiKey:                            apiKey,
-		baseURL:                           fmt.Sprintf("https://generativelanguage.googleapis.com/v1/models/%s:generateContent", modelName),
+		apiKey: apiKey,
+		baseURL: fmt.Sprintf(
+			"https://generativelanguage.googleapis.com/v1/models/%s:generateContent",
+			modelName),
 		client:                            &http.Client{},
 		questionPromptTemplate:            questionTemplate,
 		descriptionPromptTemplate:         descriptionTemplate,
@@ -159,7 +161,11 @@ func NewClient(configDir string) (GeminiClient, error) {
 
 // getDefaultQuestionPrompt returns the default question generation prompt template
 func getDefaultQuestionPrompt() string {
-	return `You are helping to create a Jira ticket. Based on the following context and conversation history, ask ONE clarifying question to better understand what needs to be done.
+	return `You are helping to create a Jira ticket. ` +
+		`Based on the following context and conversation history, ` +
+		`ask ONE clarifying question to better understand what needs to be done.
+
+
 
 Context: {{context}}
 
@@ -171,8 +177,12 @@ Ask only ONE clear, concise question. Do not include any preamble or explanation
 // getDefaultSpikeQuestionPrompt returns the default question generation prompt template for spikes
 func getDefaultSpikeQuestionPrompt() string {
 	return `You are helping to create a Jira ticket for research on a specific topic.
-Based on the following context and conversation history, ask ONE question to help explain or constrain the task for an engineer to complete.
-Important: some research is about finding out what we don't know yet, other research is about finding out if a solution is possible or not.
+Based on the following context and conversation history, ` +
+		`ask ONE question to help explain or constrain the task for an engineer to complete.
+Important: some research is about finding out what we don't know yet, ` +
+		`other research is about finding out if a solution is possible or not.
+
+
 
 Areas of interest include: 
 - why is this research needed
@@ -191,8 +201,11 @@ Do not include any preamble or explanation, just the question.`
 
 // getDefaultDescriptionPrompt returns the default description generation prompt template
 func getDefaultDescriptionPrompt() string {
-	return `You are helping to create a Jira ticket description for a research on a specific topic. 
-Based on the following context and conversation history, write a clear, and concise Jira ticket description that includes:
+	return `You are helping to create a Jira ticket description for a research on a specific topic. ` +
+		`
+ 
+Based on the following context and conversation history, ` +
+		`write a clear, and concise Jira ticket description that includes:
 - Clear explanation of what needs to be done
 - Any relevant context or background
 - Expected outcomes or acceptance criteria
@@ -206,7 +219,9 @@ Context: {{context}}
 
 // getDefaultSpikePrompt returns the default spike/research prompt template
 func getDefaultSpikePrompt() string {
-	return `You are helping to create a research spike description for a Jira ticket. Based on the following context and conversation history, write a clear, comprehensive research plan.
+	return `You are helping to create a research spike description for a Jira ticket. ` +
+		`Based on the following context and conversation history, write a clear, comprehensive research plan.
+
 
 Context: {{context}}
 
@@ -223,29 +238,49 @@ Format it as plain text suitable for a Jira description field.`
 
 // getDefaultEpicFeatureQuestionPrompt returns the default question generation prompt template for Epics and Features
 func getDefaultEpicFeatureQuestionPrompt() string {
-	return `You are helping to create a Jira Epic or Feature ticket. Based on the following context and conversation history, ask ONE clarifying question to better understand the high-level goals, business value, or scope of this Epic/Feature.
+	return `You are helping to create a Jira Epic or Feature ticket. ` +
+		`Based on the following context and conversation history, ` +
+		`ask ONE clarifying question to better understand the high-level goals, business value, or scope of this Epic/Feature.
+
+
 
 Context: {{context}}
 
 {{history}}
 
-Ask only ONE clear, concise question that helps define the strategic direction, business objectives, or high-level scope. Focus on understanding the "why" and "what" at a high level, not technical implementation details.
+Ask only ONE clear, concise question that helps define the strategic direction, ` +
+		`business objectives, or high-level scope. ` +
+		`Focus on understanding the "why" and "what" at a high level, not technical implementation details.
+
+
 Do not include any preamble or explanation, just the question.`
 }
 
 // getDefaultEpicFeaturePrompt returns the default Epic/Feature description generation prompt template
 func getDefaultEpicFeaturePrompt() string {
-	return `You are helping to create a Jira Epic or Feature description. 
-Based on the following context and conversation history, write a clear and concise high-level description formated as markdown.
+	return `You are helping to create a Jira Epic or Feature description.
+Based on the following context and conversation history, ` +
+		`write a clear and concise high-level description formated as markdown. ` +
+		`
 
-Focus on the "what" and "why" at a strategic level, not implementation details.
+
+
+Focus on the "what" and "why" at a strategic level, ` +
+		`not implementation details.
 Use headings and bullet points to make the information scannable and digestible.
 
-Start with a summary which should be readable and easily understood by a diverse audience, including developers, QA, product owners, and non-technical stakeholders. Avoid excessive technical implementation details.
+Start with a summary which should be readable and easily understood by a diverse audience, ` +
+		`including developers, QA, product owners, and non-technical stakeholders. ` +
+		`Avoid excessive technical implementation details.
+
+
 
 Explain the business value of the work and why it is important.
 
-Then define the high-level scope, including the major deliverables and, crucially, any high-level constraints on the work, or what is explicitly out of scope. 
+Then define the high-level scope, including the major deliverables and, crucially, ` +
+		`any high-level constraints on the work, or what is explicitly out of scope.
+
+ 
 
 Finally, define the success criteria or expected outcomes, and include any relevant context or background.
 
@@ -334,7 +369,9 @@ func (c *geminiClient) EstimateStoryPoints(summary, description string, availabl
 		pointsList.WriteString(" (or any other positive integer)")
 	}
 
-	prompt := fmt.Sprintf(`You are an expert at estimating story points for software development tasks using Agile/Scrum methodology.
+	prompt := fmt.Sprintf(
+		`You are an expert at estimating story points for software development tasks using Agile/Scrum methodology.
+
 
 Ticket Summary: %s
 
@@ -349,11 +386,15 @@ Please provide a story point estimate for this ticket. Consider:
 - Risk and uncertainty
 - Dependencies and integration effort
 
-Respond with ONLY a single number (the story point estimate), followed by a brief one-sentence explanation of your reasoning.
+Respond with ONLY a single number (the story point estimate), `+
+			`followed by a brief one-sentence explanation of your reasoning.
+
+
 
 Example format:
 5
-This task involves moderate complexity with clear requirements and minimal risk.`, summary, description, pointsList.String())
+This task involves moderate complexity with clear requirements and minimal risk.`,
+		summary, description, pointsList.String())
 
 	response, err := c.generateContent(prompt)
 	if err != nil {

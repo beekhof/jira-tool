@@ -108,7 +108,10 @@ func runAccept(cmd *cobra.Command, args []string) error {
 				Type string
 				Name string
 				Text string
-			}{"Comment", fmt.Sprintf("Comment #%d (by %s on %s)", i+1, comment.Author.DisplayName, comment.Created), comment.Body})
+			}{
+				"Comment",
+				fmt.Sprintf("Comment #%d (by %s on %s)", i+1, comment.Author.DisplayName, comment.Created),
+				comment.Body})
 		}
 	}
 
@@ -178,7 +181,9 @@ func runAccept(cmd *cobra.Command, args []string) error {
 	if answerInputMethod == "" {
 		answerInputMethod = "readline"
 	}
-	plan, err := qa.RunQnAFlow(geminiClient, context, cfg.MaxQuestions, spikeIdentifier, "Epic", "", nil, "", "", answerInputMethod)
+	plan, err := qa.RunQnAFlow(
+		geminiClient, context, cfg.MaxQuestions, spikeIdentifier, "Epic", "",
+		nil, "", "", answerInputMethod)
 	if err != nil {
 		return err
 	}
@@ -205,7 +210,7 @@ func runAccept(cmd *cobra.Command, args []string) error {
 	}
 
 	if confirm == "n" || confirm == "no" {
-		fmt.Println("Cancelled.")
+		fmt.Println("Canceled.")
 		return nil
 	}
 

@@ -200,11 +200,17 @@ func (c *jiraClient) UpdateTicketSeverity(ticketID, severityFieldID, severityVal
 				}
 			}
 			// Check if it's an invalid value error
-			if strings.Contains(bodyStr, "value") || strings.Contains(bodyStr, "invalid") || strings.Contains(bodyStr, "not allowed") {
-				return fmt.Errorf("invalid severity value '%s'. Please check that the value matches one of the allowed values for field %s", severityValue, severityFieldID)
+			if strings.Contains(bodyStr, "value") ||
+				strings.Contains(bodyStr, "invalid") ||
+				strings.Contains(bodyStr, "not allowed") {
+				return fmt.Errorf(
+					"invalid severity value '%s'. Please check that the value matches one of the allowed values for field %s",
+					severityValue, severityFieldID)
 			}
 			if strings.Contains(bodyStr, "customfield") || strings.Contains(bodyStr, "field") {
-				return fmt.Errorf("Jira API error: %d %s - %s\nNote: The severity field ID (%s) may be incorrect for your Jira instance. You can configure it in your config file with 'severity_field_id'.", resp.StatusCode, resp.Status, bodyStr, severityFieldID)
+				return fmt.Errorf(
+					"Jira API error: %d %s - %s\nNote: The severity field ID (%s) may be incorrect for your Jira instance. You can configure it in your config file with 'severity_field_id'.",
+					resp.StatusCode, resp.Status, bodyStr, severityFieldID)
 			}
 			return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
 		}

@@ -60,7 +60,9 @@ func runEstimate(cmd *cobra.Command, args []string) error {
 }
 
 // estimateSingleTicket estimates a single ticket
-func estimateSingleTicket(client jira.JiraClient, cfg *config.Config, ticketID string, storyPoints []int, configDir string) error {
+func estimateSingleTicket(
+	client jira.JiraClient, cfg *config.Config, ticketID string,
+	storyPoints []int, configDir string) error {
 	// Get ticket filter
 	filter := GetTicketFilter(cfg)
 
@@ -228,7 +230,8 @@ func estimateMultipleTickets(client jira.JiraClient, cfg *config.Config, storyPo
 		}
 
 		// Display page header
-		fmt.Printf("\n=== Page %d of %d (%d tickets, %d selected) ===\n\n", currentPage+1, totalPages, len(issues), selectedCount)
+		fmt.Printf("\n=== Page %d of %d (%d tickets, %d selected) ===\n\n",
+			currentPage+1, totalPages, len(issues), selectedCount)
 
 		// Display tickets in a table format
 		fmt.Printf("%-4s %-12s %-50s %-12s %-20s %-8s\n", "#", "Key", "Summary", "Priority", "Assignee", "Status")
@@ -258,7 +261,8 @@ func estimateMultipleTickets(client jira.JiraClient, cfg *config.Config, storyPo
 		}
 
 		fmt.Println()
-		fmt.Printf("Actions: [1-%d] toggle ticket | [m]ark all | [u]nmark all | [e]stimate selected | [n]ext | [p]rev | [q]uit\n", len(pageIssues))
+		fmt.Printf("Actions: [1-%d] toggle ticket | [m]ark all | [u]nmark all | "+
+			"[e]stimate selected | [n]ext | [p]rev | [q]uit\n", len(pageIssues))
 		fmt.Print("> ")
 
 		// Read user input
