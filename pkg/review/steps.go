@@ -12,7 +12,7 @@ import (
 )
 
 // CheckDescriptionQuality checks if a ticket's description meets quality criteria
-func CheckDescriptionQuality(client jira.JiraClient, ticket *jira.Issue, cfg *config.Config) (bool, string, error) {
+func CheckDescriptionQuality(client jira.JiraClient, ticket *jira.Issue, cfg *config.Config) (isValid bool, reason string, err error) {
 	// Fetch description
 	description, err := client.GetTicketDescription(ticket.Key)
 	if err != nil {
