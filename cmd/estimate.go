@@ -46,7 +46,7 @@ func runEstimate(cmd *cobra.Command, args []string) error {
 	// Get story point options (default to Fibonacci if not configured)
 	storyPoints := cfg.StoryPointOptions
 	if len(storyPoints) == 0 {
-		storyPoints = []int{1, 2, 3, 5, 8, 13}
+		storyPoints = []int{1, 2, 3, 5, 8, 13, 21, 34}
 	}
 
 	// If ticket ID provided, estimate that single ticket
