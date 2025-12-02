@@ -74,11 +74,10 @@ func HandleAssignmentStep(client jira.JiraClient, reader *bufio.Reader, cfg *con
 			}
 			selectedUser = users[0]
 			userIdentifier = userID
-		} else if selected == len(recent)+1 {
-			// User selected "Other..." - fall through to search
-		} else {
+		} else if selected != len(recent)+1 {
 			return false, fmt.Errorf("invalid selection: %d", selected)
 		}
+		// If selected == len(recent)+1, fall through to search below
 	}
 
 	// If no user selected from recent, search

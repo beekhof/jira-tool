@@ -229,7 +229,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		// include child tickets in context)
 		answerInputMethod := cfg.AnswerInputMethod
 		if answerInputMethod == "" {
-			answerInputMethod = "readline"
+			answerInputMethod = defaultInputMethod
 		}
 		description, err := qa.RunQnAFlow(
 			geminiClient, summary, cfg.MaxQuestions, summary, taskType, "",
@@ -357,16 +357,17 @@ func selectParentTicket(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 
 		// Filter to Epics and parent tickets
 		var validIssues []jira.Issue
-		for _, issue := range issues {
-			if jira.IsEpic(&issue) {
-				validIssues = append(validIssues, issue)
+		for i := range issues {
+			issue := &issues[i]
+			if jira.IsEpic(issue) {
+				validIssues = append(validIssues, *issue)
 			} else {
 				// Check if it has subtasks
 				subtaskJQL := fmt.Sprintf("parent = %s", issue.Key)
 				subtaskJQL = jira.ApplyTicketFilter(subtaskJQL, filter)
 				subtasks, err := client.SearchTickets(subtaskJQL)
 				if err == nil && len(subtasks) > 0 {
-					validIssues = append(validIssues, issue)
+					validIssues = append(validIssues, *issue)
 				}
 			}
 		}
@@ -433,13 +434,14 @@ func selectParentTicket(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 
 		// Filter and show
 		var validIssues []jira.Issue
-		for _, issue := range issues {
-			if jira.IsEpic(&issue) {
-				validIssues = append(validIssues, issue)
+		for i := range issues {
+			issue := &issues[i]
+			if jira.IsEpic(issue) {
+				validIssues = append(validIssues, *issue)
 			} else {
 				subtasks, err := client.SearchTickets(fmt.Sprintf("parent = %s", issue.Key))
 				if err == nil && len(subtasks) > 0 {
-					validIssues = append(validIssues, issue)
+					validIssues = append(validIssues, *issue)
 				}
 			}
 		}

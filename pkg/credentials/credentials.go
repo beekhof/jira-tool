@@ -67,7 +67,7 @@ func SaveCredentials(creds *Credentials, path string) error {
 // StoreSecret stores a secret in the credentials file
 // For backward compatibility with the old keyring interface
 // Note: This function now requires configDir to be passed via GetCredentialsPath
-func StoreSecret(service, user, secret, configDir string) error {
+func StoreSecret(service, _, secret, configDir string) error {
 	path := GetCredentialsPath(configDir)
 
 	// Try to load existing credentials, or create new
@@ -92,7 +92,7 @@ func StoreSecret(service, user, secret, configDir string) error {
 // GetSecret retrieves a secret from the credentials file
 // For backward compatibility with the old keyring interface
 // Note: This function now requires configDir to be passed via GetCredentialsPath
-func GetSecret(service, user, configDir string) (string, error) {
+func GetSecret(service, _, configDir string) (string, error) {
 	path := GetCredentialsPath(configDir)
 
 	creds, err := LoadCredentials(path)

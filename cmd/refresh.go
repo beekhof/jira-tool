@@ -16,7 +16,7 @@ var refreshCmd = &cobra.Command{
 	RunE:  runRefresh,
 }
 
-func runRefresh(cmd *cobra.Command, args []string) error {
+func runRefresh(_ *cobra.Command, _ []string) error {
 	configDir := GetConfigDir()
 	cachePath := jira.GetCachePath(configDir)
 

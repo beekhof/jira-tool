@@ -8,6 +8,13 @@ import (
 	"github.com/beekhof/jira-tool/pkg/jira"
 )
 
+const (
+	// Input method constants
+	inputMethodReadline            = "readline"
+	inputMethodEditor              = "editor"
+	inputMethodReadlineWithPreview = "readline_with_preview"
+)
+
 // RunQnAFlow runs the interactive Q&A flow with Gemini
 // It asks up to maxQuestions questions and then generates a final description
 // If maxQuestions is 0 or negative, defaults to 4
@@ -30,11 +37,13 @@ func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions 
 
 	// Default to readline_with_preview if not specified
 	if answerInputMethod == "" {
-		answerInputMethod = "readline_with_preview"
+		answerInputMethod = inputMethodReadlineWithPreview
 	}
 	// Validate method
-	if answerInputMethod != "readline" && answerInputMethod != "editor" && answerInputMethod != "readline_with_preview" {
-		answerInputMethod = "readline_with_preview"
+	if answerInputMethod != inputMethodReadline &&
+		answerInputMethod != inputMethodEditor &&
+		answerInputMethod != inputMethodReadlineWithPreview {
+		answerInputMethod = inputMethodReadlineWithPreview
 	}
 
 	// Include existing description in context if provided

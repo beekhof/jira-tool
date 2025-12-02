@@ -78,7 +78,7 @@ func TestUpdateTicketPoints(t *testing.T) {
 
 func TestUpdateTicketPoints_NotFound(t *testing.T) {
 	// Create a mock server that returns 404
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
@@ -100,7 +100,7 @@ func TestUpdateTicketPoints_NotFound(t *testing.T) {
 
 func TestUpdateTicketPoints_Unauthorized(t *testing.T) {
 	// Create a mock server that returns 401
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer server.Close()
@@ -215,7 +215,7 @@ func TestCreateTicket(t *testing.T) {
 
 func TestCreateTicket_Error(t *testing.T) {
 	// Create a mock server that returns 400 (bad request)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(`{"errorMessages":["Invalid project key"]}`))
 	}))

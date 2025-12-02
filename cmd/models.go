@@ -15,7 +15,7 @@ var modelsCmd = &cobra.Command{
 	RunE:  runModels,
 }
 
-func runModels(cmd *cobra.Command, args []string) error {
+func runModels(_ *cobra.Command, _ []string) error {
 	configDir := GetConfigDir()
 
 	models, err := gemini.ListModels(configDir)

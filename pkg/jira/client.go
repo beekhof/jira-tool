@@ -15,6 +15,8 @@ import (
 )
 
 // JiraClient defines the interface for Jira operations
+//
+//nolint:revive // Type name is intentional for clarity in public API
 type JiraClient interface {
 	UpdateTicketPoints(ticketID string, points int) error
 	UpdateTicketDescription(ticketID, description string) error
@@ -285,7 +287,10 @@ func (c *jiraClient) UpdateTicketPoints(ticketID string, points int) error {
 	// Check response status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Read response body for more details
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("Jira API returned error: %d %s (failed to read body: %w)", resp.StatusCode, resp.Status, readErr)
+		}
 		bodyStr := string(body)
 
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
@@ -315,7 +320,8 @@ func (c *jiraClient) UpdateTicketPoints(ticketID string, points int) error {
 			// If parsing failed, check if it's a custom field issue
 			if strings.Contains(bodyStr, "customfield") || strings.Contains(bodyStr, "field") {
 				return fmt.Errorf(
-					"Jira API error: %d %s - %s\nNote: The story points field ID (%s) may be incorrect for your Jira instance. You can configure it in your config file with 'story_points_field_id'.",
+					"jira API error: %d %s - %s\nnote: the story points field ID (%s) may be incorrect for your Jira instance. "+
+						"You can configure it in your config file with 'story_points_field_id'",
 					resp.StatusCode, resp.Status, bodyStr, c.storyPointsFieldID)
 			}
 			return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
@@ -425,7 +431,12 @@ func (c *jiraClient) CreateTicket(project, taskType, summary string) (string, er
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			return "", fmt.Errorf("authentication failed. Your Jira token may be invalid. Please run 'jira init'")
 		}
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return "", fmt.Errorf(
+				"Jira API returned error: %d %s (failed to read body: %w)",
+				resp.StatusCode, resp.Status, readErr)
+		}
 		return "", fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, string(body))
 	}
 
@@ -486,7 +497,12 @@ func (c *jiraClient) CreateTicketWithParent(project, taskType, summary, parentKe
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			return "", fmt.Errorf("authentication failed. Your Jira token may be invalid. Please run 'jira init'")
 		}
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return "", fmt.Errorf(
+				"Jira API returned error: %d %s (failed to read body: %w)",
+				resp.StatusCode, resp.Status, readErr)
+		}
 		return "", fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, string(body))
 	}
 
@@ -522,7 +538,10 @@ func (c *jiraClient) CreateTicketWithEpicLink(
 	}
 
 	// Add Epic Link field dynamically
-	fields := payload["fields"].(map[string]interface{})
+	fields, ok := payload["fields"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("invalid payload structure: fields is not a map")
+	}
 	fields[epicLinkFieldID] = epicKey
 
 	jsonData, err := json.Marshal(payload)
@@ -552,7 +571,12 @@ func (c *jiraClient) CreateTicketWithEpicLink(
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
 			return "", fmt.Errorf("authentication failed. Your Jira token may be invalid. Please run 'jira init'")
 		}
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return "", fmt.Errorf(
+				"Jira API returned error: %d %s (failed to read body: %w)",
+				resp.StatusCode, resp.Status, readErr)
+		}
 		return "", fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, string(body))
 	}
 
@@ -846,7 +870,10 @@ func (c *jiraClient) AddComment(ticketID, comment string) error {
 		if resp.StatusCode == 404 {
 			return fmt.Errorf("ticket %s not found", ticketID)
 		}
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("Jira API returned error: %d %s (failed to read body: %w)", resp.StatusCode, resp.Status, readErr)
+		}
 		return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, string(body))
 	}
 
@@ -1365,7 +1392,10 @@ func (c *jiraClient) AssignTicket(ticketID, userAccountID, userName string) erro
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Read response body for more details
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("Jira API returned error: %d %s (failed to read body: %w)", resp.StatusCode, resp.Status, readErr)
+		}
 		bodyStr := string(body)
 
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
@@ -1408,8 +1438,13 @@ func (c *jiraClient) AssignTicket(ticketID, userAccountID, userName string) erro
 							resp2, err := c.httpClient.Do(req)
 							if err == nil {
 								defer resp2.Body.Close()
-								body2, _ := io.ReadAll(resp2.Body)
-								bodyStr2 := string(body2)
+								var bodyStr2 string
+								body2, readErr2 := io.ReadAll(resp2.Body)
+								if readErr2 != nil {
+									bodyStr2 = ""
+								} else {
+									bodyStr2 = string(body2)
+								}
 
 								if resp2.StatusCode >= 200 && resp2.StatusCode < 300 {
 									// Check if body contains error messages even with success status
@@ -1549,7 +1584,10 @@ func (c *jiraClient) UnassignTicket(ticketID string) error {
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Read response body for more details
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("Jira API returned error: %d %s (failed to read body: %w)", resp.StatusCode, resp.Status, readErr)
+		}
 		bodyStr := string(body)
 
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
@@ -1596,8 +1634,12 @@ func (c *jiraClient) UnassignTicket(ticketID string) error {
 									return nil
 								}
 								// Still failed, read the error
-								body, _ = io.ReadAll(resp2.Body)
-								bodyStr = string(body)
+								body, readErr2 := io.ReadAll(resp2.Body)
+								if readErr2 != nil {
+									bodyStr = ""
+								} else {
+									bodyStr = string(body)
+								}
 							}
 						}
 					}
@@ -1736,7 +1778,12 @@ func (c *jiraClient) GetComponents(projectKey string) ([]Component, error) {
 		if resp.StatusCode == 404 {
 			return nil, fmt.Errorf("project %s not found", projectKey)
 		}
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf(
+				"Jira API returned error: %d %s (failed to read body: %w)",
+				resp.StatusCode, resp.Status, readErr)
+		}
 		return nil, fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, string(body))
 	}
 
@@ -1816,7 +1863,10 @@ func (c *jiraClient) UpdateTicketComponents(ticketID string, componentIDs []stri
 		if resp.StatusCode == 404 {
 			return fmt.Errorf("ticket %s not found", ticketID)
 		}
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("Jira API returned error: %d %s (failed to read body: %w)", resp.StatusCode, resp.Status, readErr)
+		}
 		bodyStr := string(body)
 		if resp.StatusCode == 400 {
 			// Try to parse error message from response

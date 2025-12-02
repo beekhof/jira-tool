@@ -17,6 +17,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	defaultInputMethod = "readline"
+	editCommand        = "edit"
+)
+
 var acceptCmd = &cobra.Command{
 	Use:   "accept [TICKET_ID]",
 	Short: "Convert a research ticket into an Epic and tasks",
@@ -179,7 +184,7 @@ func runAccept(cmd *cobra.Command, args []string) error {
 	// Note: ticketID is the source ticket, not the new Epic, so we don't pass it for child ticket lookup
 	answerInputMethod := cfg.AnswerInputMethod
 	if answerInputMethod == "" {
-		answerInputMethod = "readline"
+		answerInputMethod = defaultInputMethod
 	}
 	plan, err := qa.RunQnAFlow(
 		geminiClient, context, cfg.MaxQuestions, spikeIdentifier, "Epic", "",
@@ -201,7 +206,7 @@ func runAccept(cmd *cobra.Command, args []string) error {
 	}
 	confirm = strings.TrimSpace(strings.ToLower(confirm))
 
-	if confirm == "e" || confirm == "edit" {
+	if confirm == "e" || confirm == editCommand {
 		editedPlan, err := editor.OpenInEditor(plan)
 		if err != nil {
 			return fmt.Errorf("failed to edit plan: %w", err)

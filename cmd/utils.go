@@ -42,7 +42,7 @@ To load completions for all new sessions, execute once:
   macOS:
     jira utils completion bash > /usr/local/etc/bash_completion.d/jira-tool
 `,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return rootCmd.GenBashCompletion(cmd.OutOrStdout())
 		},
 	}
@@ -58,7 +58,7 @@ To load completions in your current shell session:
 To load completions for all new sessions, add to your ~/.zshrc:
   echo 'source <(jira utils completion zsh)' >> ~/.zshrc
 `,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return rootCmd.GenZshCompletion(cmd.OutOrStdout())
 		},
 	}
@@ -74,7 +74,7 @@ To load completions in your current shell session:
 To load completions for all new sessions, execute once:
   jira utils completion fish > ~/.config/fish/completions/jira-tool.fish
 `,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return rootCmd.GenFishCompletion(cmd.OutOrStdout(), true)
 		},
 	}
@@ -90,7 +90,7 @@ To load completions in your current shell session:
 To load completions for all new sessions, add to your PowerShell profile:
   jira utils completion powershell >> $PROFILE
 `,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return rootCmd.GenPowerShellCompletion(cmd.OutOrStdout())
 		},
 	}

@@ -30,7 +30,7 @@ Use --unassign flag to unassign the ticket instead of assigning it.`,
 	RunE: runAssign,
 }
 
-func runAssign(cmd *cobra.Command, args []string) error {
+func runAssign(_ *cobra.Command, args []string) error {
 	// Get config directory
 	configDir := GetConfigDir()
 

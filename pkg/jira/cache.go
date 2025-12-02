@@ -88,7 +88,7 @@ func (c *Cache) Save() error {
 		return fmt.Errorf("failed to marshal cache: %w", err)
 	}
 
-	if err := os.WriteFile(c.path, data, 0644); err != nil {
+	if err := os.WriteFile(c.path, data, 0600); err != nil {
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}
 
@@ -121,8 +121,8 @@ func (c *Cache) ClearComponentsForProject(projectKey string) {
 
 	if c.Components != nil {
 		delete(c.Components, projectKey)
-		// Save the updated cache
-		_ = c.saveUnlocked() // Ignore save errors
+		// Save the updated cache (intentionally ignore save errors)
+		_ = c.saveUnlocked() // Cache save failure is non-critical
 	}
 }
 
@@ -139,7 +139,7 @@ func (c *Cache) saveUnlocked() error {
 		return fmt.Errorf("failed to marshal cache: %w", err)
 	}
 
-	if err := os.WriteFile(c.path, data, 0644); err != nil {
+	if err := os.WriteFile(c.path, data, 0600); err != nil {
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}
 

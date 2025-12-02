@@ -10,20 +10,20 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	JiraURL                           string   `yaml:"jira_url"`
-	DefaultProject                    string   `yaml:"default_project"`
-	DefaultTaskType                   string   `yaml:"default_task_type"`
-	GeminiModel                       string   `yaml:"gemini_model,omitempty"`
-	MaxQuestions                      int      `yaml:"max_questions,omitempty"`
-	QuestionPromptTemplate            string   `yaml:"question_prompt_template,omitempty"`
-	DescriptionPromptTemplate         string   `yaml:"description_prompt_template,omitempty"`
-	SpikeQuestionPromptTemplate       string   `yaml:"spike_question_prompt_template,omitempty"`
-	SpikePromptTemplate               string   `yaml:"spike_prompt_template,omitempty"`
-	EpicFeatureQuestionPromptTemplate string   `yaml:"epic_feature_question_prompt_template,omitempty"`
-	EpicFeaturePromptTemplate         string   `yaml:"epic_feature_prompt_template,omitempty"`
-	ReviewPageSize                    int      `yaml:"review_page_size,omitempty"`
-	StoryPointOptions                 []int    `yaml:"story_point_options,omitempty"`
-	StoryPointsFieldID                string   `yaml:"story_points_field_id,omitempty"`
+	JiraURL                           string `yaml:"jira_url"`
+	DefaultProject                    string `yaml:"default_project"`
+	DefaultTaskType                   string `yaml:"default_task_type"`
+	GeminiModel                       string `yaml:"gemini_model,omitempty"`
+	MaxQuestions                      int    `yaml:"max_questions,omitempty"`
+	QuestionPromptTemplate            string `yaml:"question_prompt_template,omitempty"`
+	DescriptionPromptTemplate         string `yaml:"description_prompt_template,omitempty"`
+	SpikeQuestionPromptTemplate       string `yaml:"spike_question_prompt_template,omitempty"`
+	SpikePromptTemplate               string `yaml:"spike_prompt_template,omitempty"`
+	EpicFeatureQuestionPromptTemplate string `yaml:"epic_feature_question_prompt_template,omitempty"`
+	EpicFeaturePromptTemplate         string `yaml:"epic_feature_prompt_template,omitempty"`
+	ReviewPageSize                    int    `yaml:"review_page_size,omitempty"`
+	StoryPointOptions                 []int  `yaml:"story_point_options,omitempty"`
+	StoryPointsFieldID                string `yaml:"story_points_field_id,omitempty"`
 	// Minimum description length (default: 128)
 	DescriptionMinLength int `yaml:"description_min_length,omitempty"`
 	// Enable Gemini AI analysis for description quality (default: false)
@@ -84,7 +84,7 @@ func SaveConfig(cfg *Config, path string) error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 

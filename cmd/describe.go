@@ -84,7 +84,7 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 	// Run Q&A flow
 	answerInputMethod := cfg.AnswerInputMethod
 	if answerInputMethod == "" {
-		answerInputMethod = "readline"
+		answerInputMethod = defaultInputMethod
 	}
 
 	fmt.Printf("\nGenerating description for %s: %s\n", ticketID, ticketSummary)

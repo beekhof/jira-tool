@@ -130,11 +130,10 @@ func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *conf
 			}
 		}
 		// User selected "Other..."
-		if selected == len(recent)+1 {
-			// Fall through to show all components
-		} else {
+		if selected != len(recent)+1 {
 			return false, fmt.Errorf("invalid selection")
 		}
+		// If selected == len(recent)+1, fall through to show all components below
 	}
 
 	// Show all components

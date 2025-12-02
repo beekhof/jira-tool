@@ -10,7 +10,7 @@ import (
 )
 
 // DetectSeverityField attempts to auto-detect the severity custom field ID
-func (c *jiraClient) DetectSeverityField(projectKey string) (string, error) {
+func (c *jiraClient) DetectSeverityField(_ string) (string, error) {
 	endpoint := fmt.Sprintf("%s/rest/api/2/field", c.baseURL)
 
 	req, err := http.NewRequest("GET", endpoint, nil)
@@ -148,7 +148,10 @@ func (c *jiraClient) UpdateTicketSeverity(ticketID, severityFieldID, severityVal
 
 	// Check response status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("Jira API returned error: %d %s (failed to read body: %w)", resp.StatusCode, resp.Status, readErr)
+		}
 		bodyStr := string(body)
 
 		if resp.StatusCode == 401 || resp.StatusCode == 403 {
@@ -209,7 +212,8 @@ func (c *jiraClient) UpdateTicketSeverity(ticketID, severityFieldID, severityVal
 			}
 			if strings.Contains(bodyStr, "customfield") || strings.Contains(bodyStr, "field") {
 				return fmt.Errorf(
-					"Jira API error: %d %s - %s\nNote: The severity field ID (%s) may be incorrect for your Jira instance. You can configure it in your config file with 'severity_field_id'.",
+					"jira API error: %d %s - %s\nnote: the severity field ID (%s) may be incorrect for your Jira instance. "+
+						"You can configure it in your config file with 'severity_field_id'",
 					resp.StatusCode, resp.Status, bodyStr, severityFieldID)
 			}
 			return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)

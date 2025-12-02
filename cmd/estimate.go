@@ -26,7 +26,7 @@ where you can select multiple tickets to estimate.`,
 	RunE: runEstimate,
 }
 
-func runEstimate(cmd *cobra.Command, args []string) error {
+func runEstimate(_ *cobra.Command, args []string) error {
 	// Get config directory
 	configDir := GetConfigDir()
 

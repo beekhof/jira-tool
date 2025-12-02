@@ -39,7 +39,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Try to load existing config
 	var existingCfg *config.Config
-	existingCfg, _ = config.LoadConfig(configPath)
+	var err error
+	existingCfg, err = config.LoadConfig(configPath)
+	if err != nil {
+		// Config doesn't exist yet, that's okay
+		existingCfg = nil
+	}
 
 	// Prompt for Jira URL
 	prompt := "Jira URL (e.g., https://your-company.atlassian.net)"
@@ -66,7 +71,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println() // New line after password input
 	// If empty, try to get existing token
 	if jiraToken == "" {
-		jiraToken, _ = credentials.GetSecret(credentials.JiraServiceKey, "", configDir)
+		var err error
+		jiraToken, err = credentials.GetSecret(credentials.JiraServiceKey, "", configDir)
+		if err != nil {
+			// No existing token, that's okay
+			jiraToken = ""
+		}
 	}
 
 	// Prompt for Gemini API Key (password input)
@@ -79,7 +89,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println() // New line after password input
 	// If empty, try to get existing key
 	if geminiKey == "" {
-		geminiKey, _ = credentials.GetSecret(credentials.GeminiServiceKey, "", configDir)
+		var err error
+		geminiKey, err = credentials.GetSecret(credentials.GeminiServiceKey, "", configDir)
+		if err != nil {
+			// No existing key, that's okay
+			geminiKey = ""
+		}
 	}
 
 	// Prompt for default project
@@ -425,7 +440,12 @@ func detectStoryPointsField(jiraURL, token string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return "", fmt.Errorf(
+				"Jira API returned error: %d %s (failed to read body: %w)",
+				resp.StatusCode, resp.Status, readErr)
+		}
 		return "", fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, string(body))
 	}
 
@@ -448,9 +468,18 @@ func detectStoryPointsField(jiraURL, token string) (string, error) {
 		}
 		// Convert to our structure
 		for _, f := range fieldsAlt {
-			id, _ := f["id"].(string)
-			name, _ := f["name"].(string)
-			custom, _ := f["custom"].(bool)
+			id, ok := f["id"].(string)
+			if !ok {
+				id = ""
+			}
+			name, ok := f["name"].(string)
+			if !ok {
+				name = ""
+			}
+			custom, ok := f["custom"].(bool)
+			if !ok {
+				custom = false
+			}
 			fields = append(fields, struct {
 				ID     string `json:"id"`
 				Name   string `json:"name"`

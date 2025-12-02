@@ -9,7 +9,7 @@ import (
 )
 
 // DetectEpicLinkField attempts to auto-detect the Epic Link custom field ID
-func (c *jiraClient) DetectEpicLinkField(projectKey string) (string, error) {
+func (c *jiraClient) DetectEpicLinkField(_ string) (string, error) {
 	endpoint := fmt.Sprintf("%s/rest/api/2/field", c.baseURL)
 
 	req, err := http.NewRequest("GET", endpoint, nil)

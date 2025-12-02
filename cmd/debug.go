@@ -13,7 +13,7 @@ var debugCmd = &cobra.Command{
 	Short: "Debug: Show raw ticket data",
 	Long:  `Debug command to show raw ticket data including assignee field structure.`,
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, args []string) error {
 		configDir := GetConfigDir()
 		client, err := jira.NewClient(configDir, GetNoCache())
 		if err != nil {

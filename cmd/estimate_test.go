@@ -16,7 +16,7 @@ func (m *MockJiraClient) UpdateTicketPoints(ticketID string, points int) error {
 	return nil
 }
 
-func TestEstimateCommand(t *testing.T) {
+func TestEstimateCommand(_ *testing.T) {
 	var capturedTicketID string
 	var capturedPoints int
 

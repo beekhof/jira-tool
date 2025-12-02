@@ -16,6 +16,8 @@ import (
 )
 
 // GeminiClient defines the interface for Gemini operations
+//
+//nolint:revive // Type name is intentional for clarity in public API
 type GeminiClient interface {
 	GenerateQuestion(history []string, context string, summaryOrKey string, issueTypeName string) (string, error)
 	GenerateDescription(history []string, context string, summaryOrKey string, issueTypeName string) (string, error)
@@ -305,6 +307,8 @@ func GetDefaultTemplates() map[string]string {
 }
 
 // GeminiRequest represents the request payload
+//
+//nolint:revive // Type name is intentional for clarity
 type GeminiRequest struct {
 	Contents []Content `json:"contents"`
 }
@@ -320,6 +324,8 @@ type Part struct {
 }
 
 // GeminiResponse represents the response from Gemini API
+//
+//nolint:revive // Type name is intentional for clarity
 type GeminiResponse struct {
 	Candidates []Candidate `json:"candidates"`
 }
@@ -528,7 +534,22 @@ func (c *geminiClient) generateContent(prompt string) (string, error) {
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
 			// Exponential backoff: 5s, 10s, 20s
-			backoff := initialBackoff * time.Duration(1<<uint(attempt-1))
+			// Use safe conversion to avoid integer overflow
+			shift := attempt - 1
+			if shift < 0 {
+				shift = 0
+			}
+			if shift > 31 {
+				shift = 31 // Limit to prevent overflow
+			}
+			// Safe conversion: ensure shift is within uint32 range before conversion
+			var shiftUint uint32
+			if shift >= 0 && shift <= 31 {
+				shiftUint = uint32(shift)
+			} else {
+				shiftUint = 31
+			}
+			backoff := initialBackoff * time.Duration(1<<shiftUint)
 			fmt.Fprintf(os.Stderr, "Gemini API error (attempt %d/%d). Retrying in %v...\n", attempt, maxRetries+1, backoff)
 			time.Sleep(backoff)
 		}
@@ -610,7 +631,12 @@ func (c *geminiClient) generateContentOnce(prompt string) (string, error) {
 
 	// Check response status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return "", fmt.Errorf(
+				"Gemini API returned error: %d %s (failed to read body: %w)",
+				resp.StatusCode, resp.Status, readErr)
+		}
 
 		// Parse error response for better error messages
 		var apiError struct {
@@ -620,7 +646,8 @@ func (c *geminiClient) generateContentOnce(prompt string) (string, error) {
 				Status  string `json:"status"`
 			} `json:"error"`
 		}
-		json.Unmarshal(body, &apiError)
+		_ = json.Unmarshal(body, &apiError) // Try to parse error response, but continue even if it fails
+		// If unmarshal failed, we'll use the generic error below
 
 		// Provide user-friendly error messages
 		switch resp.StatusCode {

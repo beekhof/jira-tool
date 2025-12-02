@@ -17,7 +17,7 @@ These are the templates used when custom templates are not specified in the conf
 	RunE: runTemplates,
 }
 
-func runTemplates(cmd *cobra.Command, args []string) error {
+func runTemplates(_ *cobra.Command, _ []string) error {
 	templates := gemini.GetDefaultTemplates()
 
 	fmt.Println("# Default prompt templates")

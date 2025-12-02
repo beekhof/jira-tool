@@ -38,7 +38,12 @@ func (c *jiraClient) GetBoardsForProject(projectKey string) ([]Board, error) {
 			// No boards found is not an error - return empty list
 			return []Board{}, nil
 		}
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, fmt.Errorf(
+				"Jira API returned error: %d %s (failed to read body: %w)",
+				resp.StatusCode, resp.Status, readErr)
+		}
 		return nil, fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, string(body))
 	}
 

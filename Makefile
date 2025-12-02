@@ -45,7 +45,7 @@ lint:
 		echo "golangci-lint not found. Installing..."; \
 		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin v1.55.2; \
 	fi
-	$(GOLINT) run ./...
+	$(GOLINT) run --show-stats  ./...
 
 ## lint-install: Install golangci-lint
 lint-install:
