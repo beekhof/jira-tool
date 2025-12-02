@@ -170,7 +170,9 @@ func HandleAssignmentStep(client jira.JiraClient, reader *bufio.Reader, cfg *con
 				plannedSprints = []jira.SprintParsed{} // Continue with empty list if fails
 			}
 
-			allSprints := append(activeSprints, plannedSprints...)
+			allSprints := make([]jira.SprintParsed, 0, len(activeSprints)+len(plannedSprints))
+			allSprints = append(allSprints, activeSprints...)
+			allSprints = append(allSprints, plannedSprints...)
 			if len(allSprints) > 0 {
 				// Show recent sprints first
 				recent := state.RecentSprints

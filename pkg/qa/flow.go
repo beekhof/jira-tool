@@ -120,8 +120,7 @@ func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions 
 		}
 
 		// Normal answer - add to history
-		history = append(history, fmt.Sprintf("Q: %s", question))
-		history = append(history, fmt.Sprintf("A: %s", answer))
+		history = append(history, fmt.Sprintf("Q: %s", question), fmt.Sprintf("A: %s", answer))
 	}
 
 	// Generate the final description
@@ -133,7 +132,7 @@ func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions 
 	// Add footer to the description
 	footer := "\n\n---\n\n_This description was generated based on human answers to a " +
 		"limited number of robot questions related to the summary._"
-	description = description + footer
+	description += footer
 
 	return description, nil
 }

@@ -41,7 +41,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	// Check if first argument is "spike" (case-insensitive)
 	// If so, prepend "SPIKE: " to the rest of the summary
 	summary := strings.Join(args, " ")
-	if len(args) > 0 && strings.ToLower(args[0]) == "spike" {
+	if len(args) > 0 && strings.EqualFold(args[0], "spike") {
 		// If it's "spike", join the rest and prepend "SPIKE: "
 		if len(args) > 1 {
 			summary = "SPIKE: " + strings.Join(args[1:], " ")
@@ -383,7 +383,8 @@ func selectParentTicket(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 		}
 
 		fmt.Println("Select parent ticket:")
-		for i, issue := range validIssues {
+		for i := range validIssues {
+			issue := &validIssues[i]
 			summary := issue.Fields.Summary
 			if len(summary) > 50 {
 				summary = summary[:47] + "..."
@@ -456,7 +457,8 @@ func selectParentTicket(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 		}
 
 		fmt.Println("Select parent ticket:")
-		for i, issue := range validIssues {
+		for i := range validIssues {
+			issue := &validIssues[i]
 			summary := issue.Fields.Summary
 			if len(summary) > 50 {
 				summary = summary[:47] + "..."

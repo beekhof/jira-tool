@@ -598,7 +598,7 @@ func (c *jiraClient) CreateTicketWithEpicLink(
 func (c *jiraClient) GetTransitions(ticketID string) ([]Transition, error) {
 	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s/transitions", c.baseURL, ticketID)
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -677,7 +677,7 @@ func (c *jiraClient) TransitionTicket(ticketID, transitionID string) error {
 func (c *jiraClient) GetTicketRaw(ticketID string) (map[string]interface{}, error) {
 	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s", c.baseURL, ticketID)
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -715,7 +715,7 @@ func (c *jiraClient) GetTicketRaw(ticketID string) (map[string]interface{}, erro
 func (c *jiraClient) GetTicketDescription(ticketID string) (string, error) {
 	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s?fields=description", c.baseURL, ticketID)
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
@@ -757,7 +757,7 @@ func (c *jiraClient) GetTicketDescription(ticketID string) (string, error) {
 func (c *jiraClient) GetTicketAttachments(ticketID string) ([]Attachment, error) {
 	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s?fields=attachment", c.baseURL, ticketID)
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -799,7 +799,7 @@ func (c *jiraClient) GetTicketAttachments(ticketID string) ([]Attachment, error)
 func (c *jiraClient) GetTicketComments(ticketID string) ([]Comment, error) {
 	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s/comment", c.baseURL, ticketID)
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -969,7 +969,7 @@ func (c *jiraClient) GetPlannedSprints(boardID int) ([]SprintParsed, error) {
 
 // getSprints is a helper to fetch sprints from an endpoint
 func (c *jiraClient) getSprints(endpoint string) ([]SprintParsed, error) {
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -1019,7 +1019,7 @@ func (c *jiraClient) getSprints(endpoint string) ([]SprintParsed, error) {
 func (c *jiraClient) GetReleases(projectKey string) ([]ReleaseParsed, error) {
 	endpoint := fmt.Sprintf("%s/rest/api/2/project/%s/versions", c.baseURL, projectKey)
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -1110,7 +1110,7 @@ func (c *jiraClient) searchIssues(jql string) ([]Issue, error) {
 		return nil, fmt.Errorf("failed to build URL: %w", err)
 	}
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -1237,7 +1237,7 @@ func (c *jiraClient) SearchUsers(query string) ([]User, error) {
 		return nil, fmt.Errorf("failed to build URL: %w", err)
 	}
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -1263,7 +1263,7 @@ func (c *jiraClient) SearchUsers(query string) ([]User, error) {
 			"query": query,
 		})
 		if err == nil {
-			req, err := http.NewRequest("GET", endpoint, nil)
+			req, err := http.NewRequest("GET", endpoint, http.NoBody)
 			if err == nil {
 				req.Header.Set("Accept", "application/json")
 				c.setAuth(req)
@@ -1276,17 +1276,15 @@ func (c *jiraClient) SearchUsers(query string) ([]User, error) {
 						// v3 worked, use it
 						body = body2
 						resp = resp2
-					} else {
+					} else if isHTML(body) && isHTML(body2) {
 						// v3 also failed or returned HTML
-						if isHTML(body) && isHTML(body2) {
-							previewLen := 200
-							if len(body) < previewLen {
-								previewLen = len(body)
-							}
-							return nil, fmt.Errorf(
-								"both API v2 and v3 returned HTML (endpoints may not exist). v2 response: %s",
-								string(body[:previewLen]))
+						previewLen := 200
+						if len(body) < previewLen {
+							previewLen = len(body)
 						}
+						return nil, fmt.Errorf(
+							"both API v2 and v3 returned HTML (endpoints may not exist). v2 response: %s",
+							string(body[:previewLen]))
 					}
 				}
 			}
@@ -1696,7 +1694,7 @@ func (c *jiraClient) GetPriorities() ([]Priority, error) {
 
 	endpoint := fmt.Sprintf("%s/rest/api/2/priority", c.baseURL)
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -1757,7 +1755,7 @@ func (c *jiraClient) GetComponents(projectKey string) ([]Component, error) {
 
 	endpoint := fmt.Sprintf("%s/rest/api/2/project/%s/components", c.baseURL, projectKey)
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

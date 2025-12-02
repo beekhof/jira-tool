@@ -6,7 +6,7 @@ import (
 
 // IsSpike checks if a ticket is a spike based on the summary or ticket key
 // Spikes are identified by a "SPIKE" prefix in the summary or key (case-insensitive)
-func IsSpike(summary string, ticketKey string) bool {
+func IsSpike(summary, ticketKey string) bool {
 	// Check if summary starts with "SPIKE" (case-insensitive)
 	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(summary)), "SPIKE") {
 		return true

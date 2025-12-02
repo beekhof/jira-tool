@@ -13,7 +13,7 @@ import (
 func (c *jiraClient) DetectSeverityField(_ string) (string, error) {
 	endpoint := fmt.Sprintf("%s/rest/api/2/field", c.baseURL)
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
@@ -65,7 +65,7 @@ func (c *jiraClient) GetSeverityFieldValues(fieldID string) ([]string, error) {
 	// First, try to get field configuration
 	endpoint := fmt.Sprintf("%s/rest/api/2/field/%s", c.baseURL, fieldID)
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

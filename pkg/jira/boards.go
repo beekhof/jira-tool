@@ -16,7 +16,7 @@ type BoardResponse struct {
 func (c *jiraClient) GetBoardsForProject(projectKey string) ([]Board, error) {
 	endpoint := fmt.Sprintf("%s/rest/agile/1.0/board?projectKeyOrId=%s", c.baseURL, projectKey)
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

@@ -83,7 +83,7 @@ func TestGetConfigPath(t *testing.T) {
 
 	// Test with custom configDir
 	customPath := GetConfigPath("/custom/path")
-	expected := filepath.Join("/custom/path", "config.yaml")
+	expected := "/custom/path" + string(filepath.Separator) + "config.yaml"
 	if customPath != expected {
 		t.Errorf("Expected config path %s, got %s", expected, customPath)
 	}

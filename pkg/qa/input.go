@@ -12,7 +12,7 @@ import (
 
 // ReadAnswerWithReadline reads an answer using readline with optional editor switching
 // method can be "readline", "editor", or "readline_with_preview"
-func ReadAnswerWithReadline(prompt string, method string) (string, error) {
+func ReadAnswerWithReadline(prompt, method string) (string, error) {
 	// If method is "editor", open editor immediately
 	if method == "editor" {
 		edited, err := editor.OpenInEditor("")
@@ -95,7 +95,7 @@ func ReadAnswerWithReadline(prompt string, method string) (string, error) {
 
 // PreviewAndEditLoop shows preview and allows editing in a loop
 // method can be "readline", "editor", or "readline_with_preview"
-func PreviewAndEditLoop(answer string, method string) (string, error) {
+func PreviewAndEditLoop(answer, method string) (string, error) {
 	if method == "readline" {
 		// No preview for readline-only mode
 		return answer, nil

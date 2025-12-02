@@ -52,7 +52,7 @@ func ListModels(configDir string) ([]ModelInfo, error) {
 	for _, version := range versions {
 		url := fmt.Sprintf("https://generativelanguage.googleapis.com/%s/models?key=%s", version, apiKey)
 
-		req, err := http.NewRequest("GET", url, nil)
+		req, err := http.NewRequest("GET", url, http.NoBody)
 		if err != nil {
 			lastErr = err
 			continue
@@ -63,10 +63,10 @@ func ListModels(configDir string) ([]ModelInfo, error) {
 			lastErr = err
 			continue
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode == 200 {
 			body, err := io.ReadAll(resp.Body)
+			resp.Body.Close() // Close immediately, not deferred
 			if err != nil {
 				lastErr = err
 				continue
@@ -80,6 +80,7 @@ func ListModels(configDir string) ([]ModelInfo, error) {
 
 			return listResp.Models, nil
 		}
+		resp.Body.Close() // Close on non-200 status too
 	}
 
 	return nil, fmt.Errorf("failed to list models: %w", lastErr)
@@ -348,21 +349,21 @@ type ModelInfo struct {
 }
 
 // GenerateQuestion generates a clarifying question based on history and context
-func (c *geminiClient) GenerateQuestion(history []string, context string, summaryOrKey string, issueTypeName string) (string, error) {
+func (c *geminiClient) GenerateQuestion(history []string, context, summaryOrKey, issueTypeName string) (string, error) {
 	prompt := c.buildQuestionPrompt(history, context, summaryOrKey, issueTypeName)
 	return c.generateContent(prompt)
 }
 
 // GenerateDescription generates a description based on history and context
 // Uses appropriate prompt template based on issue type (Epic/Feature, Spike, or default)
-func (c *geminiClient) GenerateDescription(history []string, context string, summaryOrKey string, issueTypeName string) (string, error) {
+func (c *geminiClient) GenerateDescription(history []string, context, summaryOrKey, issueTypeName string) (string, error) {
 	prompt := c.buildDescriptionPrompt(history, context, summaryOrKey, issueTypeName)
 	return c.generateContent(prompt)
 }
 
 // EstimateStoryPoints estimates story points for a ticket based on summary and description
 // Returns the estimated points, reasoning text, and any error
-func (c *geminiClient) EstimateStoryPoints(summary, description string, availablePoints []int) (int, string, error) {
+func (c *geminiClient) EstimateStoryPoints(summary, description string, availablePoints []int) (points int, reasoning string, err error) {
 	// Build the prompt
 	var pointsList strings.Builder
 	for i, points := range availablePoints {
@@ -435,7 +436,7 @@ This task involves moderate complexity with clear requirements and minimal risk.
 	}
 
 	// Build reasoning from remaining lines
-	reasoning := strings.TrimSpace(strings.Join(lines[1:], " "))
+	reasoning = strings.TrimSpace(strings.Join(lines[1:], " "))
 	if reasoning == "" {
 		reasoning = response
 	}
@@ -445,7 +446,7 @@ This task involves moderate complexity with clear requirements and minimal risk.
 
 // buildQuestionPrompt constructs the prompt for generating a question
 // Uses appropriate template based on issue type: Epic/Feature > Spike > default
-func (c *geminiClient) buildQuestionPrompt(history []string, context string, summaryOrKey string, issueTypeName string) string {
+func (c *geminiClient) buildQuestionPrompt(history []string, context, summaryOrKey, issueTypeName string) string {
 	// Build history section
 	historySection := ""
 	if len(history) > 0 {
@@ -486,7 +487,7 @@ func (c *geminiClient) buildQuestionPrompt(history []string, context string, sum
 
 // buildDescriptionPrompt constructs the prompt for generating a description
 // Uses appropriate template based on issue type: Epic/Feature > Spike > default
-func (c *geminiClient) buildDescriptionPrompt(history []string, context string, summaryOrKey string, issueTypeName string) string {
+func (c *geminiClient) buildDescriptionPrompt(history []string, context, summaryOrKey, issueTypeName string) string {
 	// Build history section
 	historySection := ""
 	if len(history) > 0 {

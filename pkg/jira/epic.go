@@ -12,7 +12,7 @@ import (
 func (c *jiraClient) DetectEpicLinkField(_ string) (string, error) {
 	endpoint := fmt.Sprintf("%s/rest/api/2/field", c.baseURL)
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
@@ -114,7 +114,7 @@ func FilterValidParentTickets(client JiraClient, ticketKeys []string) ([]string,
 
 // GetChildTickets retrieves all child tickets (subtasks and epic children) for a given ticket
 // Returns a list of ticket summaries
-func GetChildTickets(client JiraClient, ticketKey string, epicLinkFieldID string) ([]string, error) {
+func GetChildTickets(client JiraClient, ticketKey, epicLinkFieldID string) ([]string, error) {
 	var childSummaries []string
 
 	// Get the ticket to check if it's an Epic
@@ -127,8 +127,8 @@ func GetChildTickets(client JiraClient, ticketKey string, epicLinkFieldID string
 	// Get subtasks (for any ticket type)
 	subtasks, err := client.SearchTickets(fmt.Sprintf("parent = %s", ticketKey))
 	if err == nil {
-		for _, subtask := range subtasks {
-			childSummaries = append(childSummaries, subtask.Fields.Summary)
+		for i := range subtasks {
+			childSummaries = append(childSummaries, subtasks[i].Fields.Summary)
 		}
 	}
 
@@ -137,8 +137,9 @@ func GetChildTickets(client JiraClient, ticketKey string, epicLinkFieldID string
 		// Search for tickets with this Epic Link
 		epicChildren, err := client.SearchTickets(fmt.Sprintf("%s = %s", epicLinkFieldID, ticketKey))
 		if err == nil {
-			for _, child := range epicChildren {
+			for i := range epicChildren {
 				// Avoid duplicates (in case a ticket is both a subtask and epic child)
+				child := &epicChildren[i]
 				summary := child.Fields.Summary
 				isDuplicate := false
 				for _, existing := range childSummaries {

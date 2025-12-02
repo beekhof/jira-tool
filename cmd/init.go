@@ -196,11 +196,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 		} else if existingCfg != nil && existingCfg.EpicLinkFieldID != "" {
 			epicLinkFieldID = existingCfg.EpicLinkFieldID
 		}
-	} else {
+	} else if existingCfg != nil && existingCfg.EpicLinkFieldID != "" {
 		// Use existing value if present
-		if existingCfg != nil && existingCfg.EpicLinkFieldID != "" {
-			epicLinkFieldID = existingCfg.EpicLinkFieldID
-		}
+		epicLinkFieldID = existingCfg.EpicLinkFieldID
 	}
 
 	// Merge with existing config to preserve all settings
@@ -285,11 +283,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 	severityInput, err := reader.ReadString('\n')
 	if err == nil {
 		severityInput = strings.TrimSpace(severityInput)
-		if severityInput == "" || strings.ToLower(severityInput) == "skip" {
+		if severityInput == "" || strings.EqualFold(severityInput, "skip") {
 			if existingCfg != nil && existingCfg.SeverityFieldID != "" {
 				cfg.SeverityFieldID = existingCfg.SeverityFieldID
 			}
-		} else if strings.ToLower(severityInput) == "auto-detect" || strings.ToLower(severityInput) == "auto" {
+		} else if strings.EqualFold(severityInput, "auto-detect") || strings.EqualFold(severityInput, "auto") {
 			// Try to auto-detect severity field
 			fmt.Println("Detecting severity field ID...")
 			jiraClient, err := jira.NewClient(configDir, false)
@@ -326,7 +324,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		severityValuesInput, err := reader.ReadString('\n')
 		if err == nil {
 			severityValuesInput = strings.TrimSpace(severityValuesInput)
-			if severityValuesInput != "" && strings.ToLower(severityValuesInput) != "skip" {
+			if severityValuesInput != "" && !strings.EqualFold(severityValuesInput, "skip") {
 				// Parse comma-separated values
 				values := strings.Split(severityValuesInput, ",")
 				cfg.SeverityValues = make([]string, 0, len(values))
@@ -424,7 +422,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 func detectStoryPointsField(jiraURL, token string) (string, error) {
 	endpoint := fmt.Sprintf("%s/rest/api/2/field", jiraURL)
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", endpoint, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}

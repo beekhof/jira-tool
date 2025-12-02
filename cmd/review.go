@@ -190,7 +190,8 @@ func runReview(cmd *cobra.Command, args []string) error {
 			"#", "Key", "Type", "Summary", "Priority", "Assignee", "Status")
 		fmt.Println(strings.Repeat("-", 120))
 
-		for i, issue := range pageIssues {
+		for i := range pageIssues {
+			issue := &pageIssues[i]
 			idx := start + i + 1
 
 			// Get priority and assignee
@@ -262,8 +263,8 @@ func runReview(cmd *cobra.Command, args []string) error {
 
 		if input == "m" || input == "mark all" {
 			// Mark all tickets on current page
-			for _, issue := range pageIssues {
-				selected[issue.Key] = true
+			for i := range pageIssues {
+				selected[pageIssues[i].Key] = true
 			}
 			fmt.Printf("Marked %d tickets on this page.\n", len(pageIssues))
 			continue
@@ -271,8 +272,8 @@ func runReview(cmd *cobra.Command, args []string) error {
 
 		if input == "u" || input == "unmark all" {
 			// Unmark all tickets on current page
-			for _, issue := range pageIssues {
-				selected[issue.Key] = false
+			for i := range pageIssues {
+				selected[pageIssues[i].Key] = false
 			}
 			fmt.Printf("Unmarked %d tickets on this page.\n", len(pageIssues))
 			continue
@@ -327,12 +328,13 @@ func runReview(cmd *cobra.Command, args []string) error {
 }
 
 // reviewSelectedTickets processes each selected ticket through the guided workflow
-func reviewSelectedTickets(client jira.JiraClient, geminiClient gemini.GeminiClient, reader *bufio.Reader, cfg *config.Config, allIssues []jira.Issue, selected map[string]bool, actedOn map[string]bool, configDir string) error {
+func reviewSelectedTickets(client jira.JiraClient, geminiClient gemini.GeminiClient, reader *bufio.Reader, cfg *config.Config, allIssues []jira.Issue, selected, actedOn map[string]bool, configDir string) error {
 	// Get list of selected tickets
 	selectedTickets := []jira.Issue{}
-	for _, issue := range allIssues {
+	for i := range allIssues {
+		issue := &allIssues[i]
 		if selected[issue.Key] {
-			selectedTickets = append(selectedTickets, issue)
+			selectedTickets = append(selectedTickets, *issue)
 		}
 	}
 
@@ -342,10 +344,11 @@ func reviewSelectedTickets(client jira.JiraClient, geminiClient gemini.GeminiCli
 
 	fmt.Printf("\nReviewing %d ticket(s)...\n\n", len(selectedTickets))
 
-	for i, ticket := range selectedTickets {
+	for i := range selectedTickets {
+		ticket := &selectedTickets[i]
 		fmt.Printf("=== [%d/%d] %s - %s ===\n", i+1, len(selectedTickets), ticket.Key, ticket.Fields.Summary)
 
-		if err := review.ProcessTicketWorkflow(client, geminiClient, reader, cfg, ticket, configDir); err != nil {
+		if err := review.ProcessTicketWorkflow(client, geminiClient, reader, cfg, *ticket, configDir); err != nil {
 			fmt.Printf("Error in workflow for %s: %v\n", ticket.Key, err)
 			fmt.Print("Continue with next ticket? [Y/n] ")
 			response, readErr := reader.ReadString('\n')

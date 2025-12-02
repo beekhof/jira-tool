@@ -119,7 +119,8 @@ func runSprintStatus(cmd *cobra.Command, args []string) error {
 	inProgressCount := 0
 	doneCount := 0
 
-	for _, issue := range issues {
+	for i := range issues {
+		issue := &issues[i]
 		points := issue.Fields.StoryPoints
 		status := issue.Fields.Status.Name
 
@@ -194,9 +195,10 @@ func runSprintStatus(cmd *cobra.Command, args []string) error {
 
 	// Group issues by status
 	statusGroups := make(map[string][]jira.Issue)
-	for _, issue := range issues {
+	for i := range issues {
+		issue := &issues[i]
 		status := issue.Fields.Status.Name
-		statusGroups[status] = append(statusGroups[status], issue)
+		statusGroups[status] = append(statusGroups[status], *issue)
 	}
 
 	// Print detailed list grouped by status
@@ -208,8 +210,9 @@ func runSprintStatus(cmd *cobra.Command, args []string) error {
 	for _, statusName := range statusOrder {
 		if groupIssues, ok := statusGroups[statusName]; ok {
 			fmt.Printf("[%s]\n", statusName)
-			for _, issue := range groupIssues {
-				points := issue.Fields.StoryPoints
+	for i := range groupIssues {
+		issue := &groupIssues[i]
+		points := issue.Fields.StoryPoints
 				if points > 0 {
 					fmt.Printf("  %s: %s (%.0f points)\n", issue.Key, issue.Fields.Summary, points)
 				} else {
@@ -312,7 +315,8 @@ func runReleaseStatus(cmd *cobra.Command, args []string) error {
 	inProgressCount := 0
 	doneCount := 0
 
-	for _, issue := range issues {
+	for i := range issues {
+		issue := &issues[i]
 		points := issue.Fields.StoryPoints
 		status := issue.Fields.Status.Name
 
@@ -371,9 +375,10 @@ func runReleaseStatus(cmd *cobra.Command, args []string) error {
 
 	// Group issues by status
 	statusGroups := make(map[string][]jira.Issue)
-	for _, issue := range issues {
+	for i := range issues {
+		issue := &issues[i]
 		status := issue.Fields.Status.Name
-		statusGroups[status] = append(statusGroups[status], issue)
+		statusGroups[status] = append(statusGroups[status], *issue)
 	}
 
 	// Print detailed list grouped by status
@@ -385,8 +390,9 @@ func runReleaseStatus(cmd *cobra.Command, args []string) error {
 	for _, statusName := range statusOrder {
 		if groupIssues, ok := statusGroups[statusName]; ok {
 			fmt.Printf("[%s]\n", statusName)
-			for _, issue := range groupIssues {
-				points := issue.Fields.StoryPoints
+	for i := range groupIssues {
+		issue := &groupIssues[i]
+		points := issue.Fields.StoryPoints
 				if points > 0 {
 					fmt.Printf("  %s: %s (%.0f points)\n", issue.Key, issue.Fields.Summary, points)
 				} else {
@@ -435,13 +441,14 @@ func runSpikesStatus(cmd *cobra.Command, args []string) error {
 	// Filter to only tickets that start with "SPIKE" prefix (case-insensitive) or have SPIKE in key
 	// This ensures we only show actual spike tickets, not tickets that just mention "spike" in the description
 	issues := []jira.Issue{}
-	for _, issue := range allIssues {
+	for i := range allIssues {
+		issue := &allIssues[i]
 		summary := issue.Fields.Summary
 		key := issue.Key
 		// Use IsSpike function to check if this is a spike ticket
 		// This checks if summary starts with "SPIKE" (case-insensitive) or key contains "SPIKE"
 		if gemini.IsSpike(summary, key) {
-			issues = append(issues, issue)
+			issues = append(issues, *issue)
 		}
 	}
 
@@ -452,9 +459,10 @@ func runSpikesStatus(cmd *cobra.Command, args []string) error {
 
 	// Group by status
 	statusGroups := make(map[string][]jira.Issue)
-	for _, issue := range issues {
+	for i := range issues {
+		issue := &issues[i]
 		status := issue.Fields.Status.Name
-		statusGroups[status] = append(statusGroups[status], issue)
+		statusGroups[status] = append(statusGroups[status], *issue)
 	}
 
 	// Calculate stats
@@ -463,7 +471,8 @@ func runSpikesStatus(cmd *cobra.Command, args []string) error {
 	inProgressCount := 0
 	doneCount := 0
 
-	for _, issue := range issues {
+	for i := range issues {
+		issue := &issues[i]
 		points := issue.Fields.StoryPoints
 		status := issue.Fields.Status.Name
 
@@ -495,9 +504,9 @@ func runSpikesStatus(cmd *cobra.Command, args []string) error {
 	for _, statusName := range statusOrder {
 		if issues, ok := statusGroups[statusName]; ok {
 			var points float64
-			for _, issue := range issues {
-				points += issue.Fields.StoryPoints
-			}
+		for i := range issues {
+			points += issues[i].Fields.StoryPoints
+		}
 			fmt.Printf("%s: %d tickets (%.0f points)\n", statusName, len(issues), points)
 		}
 	}
@@ -511,7 +520,8 @@ func runSpikesStatus(cmd *cobra.Command, args []string) error {
 	for _, statusName := range statusOrder {
 		if issues, ok := statusGroups[statusName]; ok {
 			fmt.Printf("[%s]\n", statusName)
-			for _, issue := range issues {
+			for i := range issues {
+				issue := &issues[i]
 				points := issue.Fields.StoryPoints
 				if points > 0 {
 					fmt.Printf("  %s: %s (%.0f points)\n", issue.Key, issue.Fields.Summary, points)
