@@ -18,24 +18,17 @@ import (
 
 var (
 	unassignFlag bool
-	allFlag      bool
-	stateFlag    string
 )
 
 var assignCmd = &cobra.Command{
-	Use:   "assign [TICKET_ID]",
+	Use:   "assign TICKET_ID",
 	Short: "Assign or unassign a ticket",
 	Long: `Assign or unassign a Jira ticket.
 The ticket ID should be in the format PROJECT-NUMBER (e.g., ENG-123).
+If no project prefix is provided, the default project will be used.
 
-If no ticket ID is provided, shows a paginated list of tickets
-where you can select tickets to assign or unassign.
-
-By default, only shows tickets in "Backlog" state. Use --all to show all tickets,
-or --state to filter by a specific state (e.g., --state "To Do", --state "In Progress").
-
-Use --unassign flag to unassign tickets instead of assigning them.`,
-	Args: cobra.MaximumNArgs(1),
+Use --unassign flag to unassign the ticket instead of assigning it.`,
+	Args: cobra.ExactArgs(1),
 	RunE: runAssign,
 }
 
