@@ -276,6 +276,15 @@ func runReview(cmd *cobra.Command, args []string) error {
 				fmt.Println("No tickets selected. Select tickets first.")
 				continue
 			}
+			// Initialize Gemini client if not already done
+			if geminiClient == nil {
+				geminiClient, err = gemini.NewClient(configDir)
+				if err != nil {
+					fmt.Printf("Warning: Could not initialize Gemini client: %v\n", err)
+					fmt.Println("Continuing without AI features...")
+					geminiClient = nil
+				}
+			}
 			return reviewSelectedTickets(client, geminiClient, reader, cfg, issues, selected, actedOn, configDir)
 		}
 
