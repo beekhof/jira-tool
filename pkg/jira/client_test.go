@@ -64,9 +64,10 @@ func TestUpdateTicketPoints(t *testing.T) {
 
 	// Create a client pointing to the mock server
 	client := &jiraClient{
-		baseURL:    server.URL,
-		httpClient: &http.Client{},
-		authToken:  "test-token",
+		baseURL:            server.URL,
+		httpClient:         &http.Client{},
+		authToken:          "test-token",
+		storyPointsFieldID: "customfield_10016", // Set the field ID expected by the test
 	}
 
 	// Test the UpdateTicketPoints method
