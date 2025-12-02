@@ -109,11 +109,12 @@ func runReview(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	reader := bufio.NewReader(os.Stdin)
+	configDir := GetConfigDir()
+
 	// If only one ticket, automatically run guided workflow
 	if len(issues) == 1 {
 		selectedIssue := issues[0]
-		reader := bufio.NewReader(os.Stdin)
-		configDir := GetConfigDir()
 
 		// Initialize Gemini client
 		geminiClient, err := gemini.NewClient(configDir)
@@ -142,9 +143,6 @@ func runReview(cmd *cobra.Command, args []string) error {
 	if noPagingFlag {
 		pageSize = len(issues)
 	}
-
-	reader := bufio.NewReader(os.Stdin)
-	configDir := GetConfigDir()
 
 	// Initialize Gemini client
 	var geminiClient gemini.GeminiClient
