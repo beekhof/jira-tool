@@ -154,11 +154,6 @@ func runReview(cmd *cobra.Command, args []string) error {
 		fmt.Println("Continuing without AI features...")
 		geminiClient = nil
 	}
-	if err != nil {
-		fmt.Printf("Warning: Could not initialize Gemini client: %v\n", err)
-		fmt.Println("Continuing without AI features...")
-		geminiClient = nil
-	}
 
 	// Track selected tickets
 	selected := make(map[string]bool)
