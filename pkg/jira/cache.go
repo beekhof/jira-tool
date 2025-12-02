@@ -122,7 +122,10 @@ func (c *Cache) ClearComponentsForProject(projectKey string) {
 	if c.Components != nil {
 		delete(c.Components, projectKey)
 		// Save the updated cache (intentionally ignore save errors)
-		_ = c.saveUnlocked() // Cache save failure is non-critical
+		if err := c.saveUnlocked(); err != nil {
+			// Cache save failure is non-critical, log but don't fail
+			_ = err
+		}
 	}
 }
 
