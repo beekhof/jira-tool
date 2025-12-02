@@ -85,7 +85,8 @@ func runDescribe(cmd *cobra.Command, args []string) error {
 	}
 	
 	fmt.Printf("\nGenerating description for %s: %s\n", ticketID, ticketSummary)
-	fmt.Println("Answer the questions below to help generate a comprehensive description.\n")
+	fmt.Println("Answer the questions below to help generate a comprehensive description.")
+	fmt.Println()
 	
 	description, err := qa.RunQnAFlow(geminiClient, ticketSummary, cfg.MaxQuestions, ticketSummary, issueTypeName, existingDesc, client, ticketID, cfg.EpicLinkFieldID, answerInputMethod)
 	if err != nil {
