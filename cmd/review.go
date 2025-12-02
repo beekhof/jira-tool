@@ -8,10 +8,8 @@ import (
 	"strings"
 
 	"github.com/beekhof/jira-tool/pkg/config"
-	"github.com/beekhof/jira-tool/pkg/editor"
 	"github.com/beekhof/jira-tool/pkg/gemini"
 	"github.com/beekhof/jira-tool/pkg/jira"
-	"github.com/beekhof/jira-tool/pkg/qa"
 	"github.com/beekhof/jira-tool/pkg/review"
 
 	"github.com/spf13/cobra"
@@ -528,87 +526,6 @@ func handleTriage(client jira.JiraClient, reader *bufio.Reader, ticketID string)
 	}
 
 	return client.UpdateTicketPriority(ticketID, priorities[selected-1].ID)
-}
-
-// handleDetail is unused - keeping for potential future use
-// Use 'jira-tool describe' command instead
-//
-//nolint:unused
-func handleDetail(client jira.JiraClient, reader *bufio.Reader, ticketID, summary string) error {
-	configDir := GetConfigDir()
-
-	// Load config to get max questions
-	configPath := config.GetConfigPath(configDir)
-	cfg, err := config.LoadConfig(configPath)
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Get ticket filter
-	filter := GetTicketFilter(cfg)
-
-	// Get ticket details to check for spike (need summary and key)
-	jql := fmt.Sprintf("key = %s", ticketID)
-	jql = jira.ApplyTicketFilter(jql, filter)
-	issues, err := client.SearchTickets(jql)
-	if err != nil {
-		return fmt.Errorf("failed to get ticket details: %w", err)
-	}
-	if len(issues) == 0 {
-		return fmt.Errorf("ticket %s not found", ticketID)
-	}
-	ticketSummary := issues[0].Fields.Summary
-	issueTypeName := issues[0].Fields.IssueType.Name
-
-	geminiClient, err := gemini.NewClient(configDir)
-	if err != nil {
-		return err
-	}
-
-	// Run Q&A flow (pass summary to detect spike based on SPIKE prefix,
-	// pass issueTypeName for Epic/Feature detection, include child tickets in context)
-	// Get existing description if available
-	existingDesc, err := client.GetTicketDescription(ticketID)
-	if err != nil {
-		existingDesc = "" // Continue with empty description if unavailable
-	}
-	answerInputMethod := cfg.AnswerInputMethod
-	if answerInputMethod == "" {
-		answerInputMethod = "readline"
-	}
-	description, err := qa.RunQnAFlow(
-		geminiClient, summary, cfg.MaxQuestions, ticketSummary, issueTypeName,
-		existingDesc, client, ticketID, cfg.EpicLinkFieldID, answerInputMethod)
-	if err != nil {
-		return err
-	}
-
-	// Print and ask for confirmation
-	fmt.Println("\nGenerated description:")
-	fmt.Println("---")
-	fmt.Println(description)
-	fmt.Println("---")
-	fmt.Print("\nUpdate ticket with this description? [Y/n/e(dit)] ")
-
-	confirm, err := reader.ReadString('\n')
-	if err != nil {
-		return err
-	}
-	confirm = strings.TrimSpace(strings.ToLower(confirm))
-
-	if confirm == "e" || confirm == "edit" {
-		editedDescription, err := editor.OpenInEditor(description)
-		if err != nil {
-			return fmt.Errorf("failed to edit description: %w", err)
-		}
-		description = editedDescription
-	}
-
-	if confirm != "n" && confirm != "no" {
-		return client.UpdateTicketDescription(ticketID, description)
-	}
-
-	return nil
 }
 
 func handleEstimate(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticketID string) error {
