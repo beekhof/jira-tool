@@ -43,81 +43,104 @@ var spikesCmd = &cobra.Command{
 	RunE:  runSpikesStatus,
 }
 
-func runSprintStatus(cmd *cobra.Command, args []string) error {
+func runSprintStatus(_ *cobra.Command, _ []string) error {
 	configDir := GetConfigDir()
 	client, err := jira.NewClient(configDir, GetNoCache())
 	if err != nil {
 		return err
 	}
 
-	// For now, use board ID 1 as default (this could be configurable)
-	boardID := 1
+	selectedSprint, err := selectSprintForStatus(client, 1)
+	if err != nil {
+		return err
+	}
 
+	issues, err := client.GetIssuesForSprint(selectedSprint.ID)
+	if err != nil {
+		return err
+	}
+
+	stats := calculateSprintStats(issues)
+	displaySprintStatus(&selectedSprint, stats)
+	displaySprintIssues(issues)
+
+	return nil
+}
+
+func selectSprintForStatus(client jira.JiraClient, boardID int) (jira.SprintParsed, error) {
 	var sprints []jira.SprintParsed
+	var err error
+
 	if nextFlag {
 		sprints, err = client.GetPlannedSprints(boardID)
 	} else {
 		sprints, err = client.GetActiveSprints(boardID)
 	}
 	if err != nil {
-		return err
+		return jira.SprintParsed{}, err
 	}
 
 	if len(sprints) == 0 {
 		if nextFlag {
-			return fmt.Errorf("no planned sprints found")
+			return jira.SprintParsed{}, fmt.Errorf("no planned sprints found")
 		}
-		return fmt.Errorf("no active sprints found")
+		return jira.SprintParsed{}, fmt.Errorf("no active sprints found")
 	}
 
-	// Find the appropriate sprint
-	var selectedSprint jira.SprintParsed
 	if nextFlag {
-		// Find planned sprint with earliest start date
-		sort.Slice(sprints, func(i, j int) bool {
-			if sprints[i].StartDate.IsZero() {
-				return false
-			}
-			if sprints[j].StartDate.IsZero() {
-				return true
-			}
-			return sprints[i].StartDate.Before(sprints[j].StartDate)
-		})
-		selectedSprint = sprints[0]
-	} else {
-		// Find active sprint with nearest end date
-		now := time.Now()
-		sort.Slice(sprints, func(i, j int) bool {
-			if sprints[i].EndDate.IsZero() {
-				return false
-			}
-			if sprints[j].EndDate.IsZero() {
-				return true
-			}
-			diffI := sprints[i].EndDate.Sub(now)
-			diffJ := sprints[j].EndDate.Sub(now)
-			if diffI < 0 {
-				return false
-			}
-			if diffJ < 0 {
-				return true
-			}
-			return diffI < diffJ
-		})
-		selectedSprint = sprints[0]
+		return selectNextSprint(sprints), nil
 	}
+	return selectActiveSprint(sprints), nil
+}
 
-	// Get issues for the sprint
-	issues, err := client.GetIssuesForSprint(selectedSprint.ID)
-	if err != nil {
-		return err
-	}
+func selectNextSprint(sprints []jira.SprintParsed) jira.SprintParsed {
+	sort.Slice(sprints, func(i, j int) bool {
+		if sprints[i].StartDate.IsZero() {
+			return false
+		}
+		if sprints[j].StartDate.IsZero() {
+			return true
+		}
+		return sprints[i].StartDate.Before(sprints[j].StartDate)
+	})
+	return sprints[0]
+}
 
-	// Calculate stats
-	var todoPoints, inProgressPoints, donePoints float64
-	todoCount := 0
-	inProgressCount := 0
-	doneCount := 0
+func selectActiveSprint(sprints []jira.SprintParsed) jira.SprintParsed {
+	now := time.Now()
+	sort.Slice(sprints, func(i, j int) bool {
+		if sprints[i].EndDate.IsZero() {
+			return false
+		}
+		if sprints[j].EndDate.IsZero() {
+			return true
+		}
+		diffI := sprints[i].EndDate.Sub(now)
+		diffJ := sprints[j].EndDate.Sub(now)
+		if diffI < 0 {
+			return false
+		}
+		if diffJ < 0 {
+			return true
+		}
+		return diffI < diffJ
+	})
+	return sprints[0]
+}
+
+type sprintStats struct {
+	todoPoints       float64
+	inProgressPoints float64
+	donePoints       float64
+	todoCount        int
+	inProgressCount  int
+	doneCount        int
+	totalPoints      float64
+	progressPercent  float64
+}
+
+func calculateSprintStats(issues []jira.Issue) sprintStats {
+	var stats sprintStats
 
 	for i := range issues {
 		issue := &issues[i]
@@ -126,31 +149,29 @@ func runSprintStatus(cmd *cobra.Command, args []string) error {
 
 		switch status {
 		case "To Do", "Open", "Backlog":
-			todoPoints += points
-			todoCount++
+			stats.todoPoints += points
+			stats.todoCount++
 		case "In Progress", "In Review", "Review":
-			inProgressPoints += points
-			inProgressCount++
+			stats.inProgressPoints += points
+			stats.inProgressCount++
 		case "Done", "Closed", "Resolved":
-			donePoints += points
-			doneCount++
+			stats.donePoints += points
+			stats.doneCount++
 		}
 	}
 
-	totalPoints := todoPoints + inProgressPoints + donePoints
-	progressPercent := 0.0
-	if totalPoints > 0 {
-		progressPercent = (donePoints / totalPoints) * 100
+	stats.totalPoints = stats.todoPoints + stats.inProgressPoints + stats.donePoints
+	if stats.totalPoints > 0 {
+		stats.progressPercent = (stats.donePoints / stats.totalPoints) * 100
 	}
 
-	// Calculate days remaining
-	daysRemaining := 0
-	if !selectedSprint.EndDate.IsZero() {
-		daysRemaining = int(time.Until(selectedSprint.EndDate).Hours() / 24)
-	}
+	return stats
+}
 
-	// Print report
-	fmt.Printf("Sprint: %s", selectedSprint.Name)
+func displaySprintStatus(sprint *jira.SprintParsed, stats sprintStats) {
+	daysRemaining := calculateDaysRemaining(sprint.EndDate)
+
+	fmt.Printf("Sprint: %s", sprint.Name)
 	if daysRemaining > 0 {
 		fmt.Printf(" (ends in %d days)\n", daysRemaining)
 	} else if daysRemaining < 0 {
@@ -159,7 +180,26 @@ func runSprintStatus(cmd *cobra.Command, args []string) error {
 		fmt.Println(" (ends today)")
 	}
 
-	// Progress bar (simple text representation)
+	bar := buildProgressBar(stats.progressPercent)
+	fmt.Printf("Progress: [%s] %.0f%% (%.0f/%.0f points)\n",
+		bar, stats.progressPercent, stats.donePoints, stats.totalPoints)
+
+	onTrack := calculateOnTrackStatus(sprint, stats.progressPercent)
+	fmt.Printf("On Track: %s\n", onTrack)
+	fmt.Println("---")
+	fmt.Printf("To Do:       %.0f points (%d issues)\n", stats.todoPoints, stats.todoCount)
+	fmt.Printf("In Progress: %.0f points (%d issues)\n", stats.inProgressPoints, stats.inProgressCount)
+	fmt.Printf("Done:        %.0f points (%d issues)\n", stats.donePoints, stats.doneCount)
+}
+
+func calculateDaysRemaining(endDate time.Time) int {
+	if endDate.IsZero() {
+		return 0
+	}
+	return int(time.Until(endDate).Hours() / 24)
+}
+
+func buildProgressBar(progressPercent float64) string {
 	barLength := 20
 	filled := int(progressPercent / 100 * float64(barLength))
 	bar := ""
@@ -170,38 +210,33 @@ func runSprintStatus(cmd *cobra.Command, args []string) error {
 			bar += "-"
 		}
 	}
+	return bar
+}
 
-	fmt.Printf("Progress: [%s] %.0f%% (%.0f/%.0f points)\n", bar, progressPercent, donePoints, totalPoints)
-
-	// Determine if on track (simplified - just check if progress > 50% when more than half time has passed)
-	onTrack := "Yes"
-	if !selectedSprint.StartDate.IsZero() && !selectedSprint.EndDate.IsZero() {
-		totalDuration := selectedSprint.EndDate.Sub(selectedSprint.StartDate)
-		elapsed := time.Since(selectedSprint.StartDate)
-		if totalDuration > 0 {
-			timeProgress := float64(elapsed) / float64(totalDuration)
-			if timeProgress > 0.5 && progressPercent < 50 {
-				onTrack = "No (behind ideal burndown)"
-			} else if timeProgress < 0.5 && progressPercent > 50 {
-				onTrack = "Yes (ahead of ideal burndown)"
-			}
-		}
-	}
-	fmt.Printf("On Track: %s\n", onTrack)
-	fmt.Println("---")
-	fmt.Printf("To Do:       %.0f points (%d issues)\n", todoPoints, todoCount)
-	fmt.Printf("In Progress: %.0f points (%d issues)\n", inProgressPoints, inProgressCount)
-	fmt.Printf("Done:        %.0f points (%d issues)\n", donePoints, doneCount)
-
-	// Group issues by status
-	statusGroups := make(map[string][]jira.Issue)
-	for i := range issues {
-		issue := &issues[i]
-		status := issue.Fields.Status.Name
-		statusGroups[status] = append(statusGroups[status], *issue)
+func calculateOnTrackStatus(sprint *jira.SprintParsed, progressPercent float64) string {
+	if sprint.StartDate.IsZero() || sprint.EndDate.IsZero() {
+		return "Yes"
 	}
 
-	// Print detailed list grouped by status
+	totalDuration := sprint.EndDate.Sub(sprint.StartDate)
+	elapsed := time.Since(sprint.StartDate)
+	if totalDuration <= 0 {
+		return "Yes"
+	}
+
+	timeProgress := float64(elapsed) / float64(totalDuration)
+	if timeProgress > 0.5 && progressPercent < 50 {
+		return "No (behind ideal burndown)"
+	}
+	if timeProgress < 0.5 && progressPercent > 50 {
+		return "Yes (ahead of ideal burndown)"
+	}
+	return "Yes"
+}
+
+func displaySprintIssues(issues []jira.Issue) {
+	statusGroups := groupIssuesByStatus(issues)
+
 	fmt.Println("\n---")
 	fmt.Println("Tickets:")
 	fmt.Println()
@@ -222,18 +257,25 @@ func runSprintStatus(cmd *cobra.Command, args []string) error {
 			fmt.Println()
 		}
 	}
-
-	return nil
 }
 
-func runReleaseStatus(cmd *cobra.Command, args []string) error {
+func groupIssuesByStatus(issues []jira.Issue) map[string][]jira.Issue {
+	statusGroups := make(map[string][]jira.Issue)
+	for i := range issues {
+		issue := &issues[i]
+		status := issue.Fields.Status.Name
+		statusGroups[status] = append(statusGroups[status], *issue)
+	}
+	return statusGroups
+}
+
+func runReleaseStatus(_ *cobra.Command, _ []string) error {
 	configDir := GetConfigDir()
 	client, err := jira.NewClient(configDir, GetNoCache())
 	if err != nil {
 		return err
 	}
 
-	// Load config to get default project
 	configPath := config.GetConfigPath(configDir)
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
@@ -245,108 +287,92 @@ func runReleaseStatus(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("default_project not configured. Please run 'jira init'")
 	}
 
-	// Get releases
-	releases, err := client.GetReleases(projectKey)
+	selectedRelease, err := selectReleaseForStatus(client, projectKey)
 	if err != nil {
 		return err
 	}
 
-	// Filter unreleased releases
+	issues, err := client.GetIssuesForRelease(selectedRelease.ID)
+	if err != nil {
+		return err
+	}
+
+	stats := calculateSprintStats(issues)
+	displayReleaseStatus(&selectedRelease, stats)
+	displaySprintIssues(issues)
+
+	return nil
+}
+
+func selectReleaseForStatus(client jira.JiraClient, projectKey string) (jira.ReleaseParsed, error) {
+	releases, err := client.GetReleases(projectKey)
+	if err != nil {
+		return jira.ReleaseParsed{}, err
+	}
+
+	unreleased := filterUnreleasedReleases(releases)
+	if len(unreleased) == 0 {
+		return jira.ReleaseParsed{}, fmt.Errorf("no unreleased versions found")
+	}
+
+	if nextFlag {
+		return selectNextRelease(unreleased)
+	}
+	return selectNearestRelease(unreleased), nil
+}
+
+func filterUnreleasedReleases(releases []jira.ReleaseParsed) []jira.ReleaseParsed {
 	unreleased := []jira.ReleaseParsed{}
 	for _, r := range releases {
 		if !r.Released {
 			unreleased = append(unreleased, r)
 		}
 	}
+	return unreleased
+}
 
-	if len(unreleased) == 0 {
-		return fmt.Errorf("no unreleased versions found")
-	}
-
-	// Find the appropriate release
-	var selectedRelease jira.ReleaseParsed
-	if nextFlag {
-		// Find second-nearest release date
-		sort.Slice(unreleased, func(i, j int) bool {
-			if unreleased[i].ReleaseDate.IsZero() {
-				return false
-			}
-			if unreleased[j].ReleaseDate.IsZero() {
-				return true
-			}
-			return unreleased[i].ReleaseDate.Before(unreleased[j].ReleaseDate)
-		})
-		if len(unreleased) < 2 {
-			return fmt.Errorf("only one unreleased version found")
+func selectNextRelease(unreleased []jira.ReleaseParsed) (jira.ReleaseParsed, error) {
+	sort.Slice(unreleased, func(i, j int) bool {
+		if unreleased[i].ReleaseDate.IsZero() {
+			return false
 		}
-		selectedRelease = unreleased[1]
-	} else {
-		// Find nearest release date
-		now := time.Now()
-		sort.Slice(unreleased, func(i, j int) bool {
-			if unreleased[i].ReleaseDate.IsZero() {
-				return false
-			}
-			if unreleased[j].ReleaseDate.IsZero() {
-				return true
-			}
-			diffI := unreleased[i].ReleaseDate.Sub(now)
-			diffJ := unreleased[j].ReleaseDate.Sub(now)
-			if diffI < 0 {
-				return false
-			}
-			if diffJ < 0 {
-				return true
-			}
-			return diffI < diffJ
-		})
-		selectedRelease = unreleased[0]
-	}
-
-	// Get issues for the release
-	issues, err := client.GetIssuesForRelease(selectedRelease.ID)
-	if err != nil {
-		return err
-	}
-
-	// Calculate stats (same as sprint)
-	var todoPoints, inProgressPoints, donePoints float64
-	todoCount := 0
-	inProgressCount := 0
-	doneCount := 0
-
-	for i := range issues {
-		issue := &issues[i]
-		points := issue.Fields.StoryPoints
-		status := issue.Fields.Status.Name
-
-		switch status {
-		case "To Do", "Open", "Backlog":
-			todoPoints += points
-			todoCount++
-		case "In Progress", "In Review", "Review":
-			inProgressPoints += points
-			inProgressCount++
-		case "Done", "Closed", "Resolved":
-			donePoints += points
-			doneCount++
+		if unreleased[j].ReleaseDate.IsZero() {
+			return true
 		}
+		return unreleased[i].ReleaseDate.Before(unreleased[j].ReleaseDate)
+	})
+	if len(unreleased) < 2 {
+		return jira.ReleaseParsed{}, fmt.Errorf("only one unreleased version found")
 	}
+	return unreleased[1], nil
+}
 
-	totalPoints := todoPoints + inProgressPoints + donePoints
-	progressPercent := 0.0
-	if totalPoints > 0 {
-		progressPercent = (donePoints / totalPoints) * 100
-	}
+func selectNearestRelease(unreleased []jira.ReleaseParsed) jira.ReleaseParsed {
+	now := time.Now()
+	sort.Slice(unreleased, func(i, j int) bool {
+		if unreleased[i].ReleaseDate.IsZero() {
+			return false
+		}
+		if unreleased[j].ReleaseDate.IsZero() {
+			return true
+		}
+		diffI := unreleased[i].ReleaseDate.Sub(now)
+		diffJ := unreleased[j].ReleaseDate.Sub(now)
+		if diffI < 0 {
+			return false
+		}
+		if diffJ < 0 {
+			return true
+		}
+		return diffI < diffJ
+	})
+	return unreleased[0]
+}
 
-	// Calculate days until release
-	daysUntilRelease := 0
-	if !selectedRelease.ReleaseDate.IsZero() {
-		daysUntilRelease = int(time.Until(selectedRelease.ReleaseDate).Hours() / 24)
-	}
+func displayReleaseStatus(release *jira.ReleaseParsed, stats sprintStats) {
+	daysUntilRelease := calculateDaysRemaining(release.ReleaseDate)
 
-	// Print report
-	fmt.Printf("Release: %s", selectedRelease.Name)
+	fmt.Printf("Release: %s", release.Name)
 	if daysUntilRelease > 0 {
 		fmt.Printf(" (releases in %d days)\n", daysUntilRelease)
 	} else if daysUntilRelease < 0 {
@@ -355,55 +381,13 @@ func runReleaseStatus(cmd *cobra.Command, args []string) error {
 		fmt.Println(" (releases today)")
 	}
 
-	// Progress bar
-	barLength := 20
-	filled := int(progressPercent / 100 * float64(barLength))
-	bar := ""
-	for i := 0; i < barLength; i++ {
-		if i < filled {
-			bar += "#"
-		} else {
-			bar += "-"
-		}
-	}
-
-	fmt.Printf("Progress: [%s] %.0f%% (%.0f/%.0f points)\n", bar, progressPercent, donePoints, totalPoints)
+	bar := buildProgressBar(stats.progressPercent)
+	fmt.Printf("Progress: [%s] %.0f%% (%.0f/%.0f points)\n",
+		bar, stats.progressPercent, stats.donePoints, stats.totalPoints)
 	fmt.Println("---")
-	fmt.Printf("To Do:       %.0f points (%d issues)\n", todoPoints, todoCount)
-	fmt.Printf("In Progress: %.0f points (%d issues)\n", inProgressPoints, inProgressCount)
-	fmt.Printf("Done:        %.0f points (%d issues)\n", donePoints, doneCount)
-
-	// Group issues by status
-	statusGroups := make(map[string][]jira.Issue)
-	for i := range issues {
-		issue := &issues[i]
-		status := issue.Fields.Status.Name
-		statusGroups[status] = append(statusGroups[status], *issue)
-	}
-
-	// Print detailed list grouped by status
-	fmt.Println("\n---")
-	fmt.Println("Tickets:")
-	fmt.Println()
-
-	statusOrder := []string{"To Do", "Open", "Backlog", "In Progress", "In Review", "Review", "Done", "Closed", "Resolved"}
-	for _, statusName := range statusOrder {
-		if groupIssues, ok := statusGroups[statusName]; ok {
-			fmt.Printf("[%s]\n", statusName)
-			for i := range groupIssues {
-				issue := &groupIssues[i]
-				points := issue.Fields.StoryPoints
-				if points > 0 {
-					fmt.Printf("  %s: %s (%.0f points)\n", issue.Key, issue.Fields.Summary, points)
-				} else {
-					fmt.Printf("  %s: %s\n", issue.Key, issue.Fields.Summary)
-				}
-			}
-			fmt.Println()
-		}
-	}
-
-	return nil
+	fmt.Printf("To Do:       %.0f points (%d issues)\n", stats.todoPoints, stats.todoCount)
+	fmt.Printf("In Progress: %.0f points (%d issues)\n", stats.inProgressPoints, stats.inProgressCount)
+	fmt.Printf("Done:        %.0f points (%d issues)\n", stats.donePoints, stats.doneCount)
 }
 
 func runSpikesStatus(_ *cobra.Command, _ []string) error {

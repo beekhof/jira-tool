@@ -31,10 +31,8 @@ with decomposed sub-tasks. The ticket will be transitioned to "Done" status.`,
 	RunE: runAccept,
 }
 
-func runAccept(cmd *cobra.Command, args []string) error {
+func runAccept(_ *cobra.Command, args []string) error {
 	configDir := GetConfigDir()
-
-	// Load config first to get default project
 	configPath := config.GetConfigPath(configDir)
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
@@ -42,16 +40,66 @@ func runAccept(cmd *cobra.Command, args []string) error {
 	}
 
 	ticketID := normalizeTicketID(args[0], cfg.DefaultProject)
-
 	client, err := jira.NewClient(configDir, GetNoCache())
 	if err != nil {
 		return err
 	}
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+
+	if err := transitionToDone(client, ticketID); err != nil {
+		return err
 	}
 
-	// Get transitions and find "Done" transition
+	sources, err := gatherResearchSources(client, ticketID)
+	if err != nil {
+		return err
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	selectedSource, err := selectResearchSource(reader, sources)
+	if err != nil {
+		return err
+	}
+
+	epicSummary, err := promptEpicSummary(reader)
+	if err != nil {
+		return err
+	}
+
+	plan, err := generateEpicPlan(client, cfg, ticketID, epicSummary, selectedSource, configDir)
+	if err != nil {
+		return err
+	}
+
+	plan, err = confirmAndEditPlan(reader, plan)
+	if err != nil {
+		return err
+	}
+	if plan == "" {
+		return nil // User canceled
+	}
+
+	epic, tasks, err := parser.ParseEpicPlan(plan)
+	if err != nil {
+		return fmt.Errorf("failed to parse epic plan: %w", err)
+	}
+
+	issueKeys, err := createEpicAndTasks(client, cfg, epic, tasks)
+	if err != nil {
+		return err
+	}
+
+	if err := promptSprintAssignment(client, reader, issueKeys, configDir); err != nil {
+		return err
+	}
+
+	if err := promptReleaseAssignment(client, reader, cfg.DefaultProject, issueKeys, configDir); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func transitionToDone(client jira.JiraClient, ticketID string) error {
 	transitions, err := client.GetTransitions(ticketID)
 	if err != nil {
 		return err
@@ -69,63 +117,53 @@ func runAccept(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not find 'Done' transition for ticket %s", ticketID)
 	}
 
-	// Transition ticket to Done
-	if err := client.TransitionTicket(ticketID, doneTransitionID); err != nil {
-		return fmt.Errorf("failed to transition ticket: %w", err)
-	}
+	return client.TransitionTicket(ticketID, doneTransitionID)
+}
 
-	// Gather research sources
-	sources := []struct {
-		Type string
-		Name string
-		Text string
-	}{}
+type researchSource struct {
+	Type string
+	Name string
+	Text string
+}
 
-	// Get description
+func gatherResearchSources(client jira.JiraClient, ticketID string) ([]researchSource, error) {
+	sources := []researchSource{}
+
 	description, err := client.GetTicketDescription(ticketID)
 	if err == nil && description != "" {
-		sources = append(sources, struct {
-			Type string
-			Name string
-			Text string
-		}{"Description", "Ticket Description", description})
+		sources = append(sources, researchSource{"Description", "Ticket Description", description})
 	}
 
-	// Get attachments
 	attachments, err := client.GetTicketAttachments(ticketID)
 	if err == nil {
 		for _, att := range attachments {
-			// Note: We'd need to download the attachment content
-			// For now, we'll just list them
-			sources = append(sources, struct {
-				Type string
-				Name string
-				Text string
-			}{"Attachment", att.Filename, fmt.Sprintf("Attachment: %s (ID: %s)", att.Filename, att.ID)})
+			sources = append(sources, researchSource{
+				"Attachment",
+				att.Filename,
+				fmt.Sprintf("Attachment: %s (ID: %s)", att.Filename, att.ID),
+			})
 		}
 	}
 
-	// Get comments
 	comments, err := client.GetTicketComments(ticketID)
 	if err == nil {
 		for i, comment := range comments {
-			sources = append(sources, struct {
-				Type string
-				Name string
-				Text string
-			}{
+			sources = append(sources, researchSource{
 				"Comment",
 				fmt.Sprintf("Comment #%d (by %s on %s)", i+1, comment.Author.DisplayName, comment.Created),
-				comment.Body})
+				comment.Body,
+			})
 		}
 	}
 
 	if len(sources) == 0 {
-		return fmt.Errorf("no research sources found in ticket %s", ticketID)
+		return nil, fmt.Errorf("no research sources found in ticket %s", ticketID)
 	}
 
-	// Present source selection
-	reader := bufio.NewReader(os.Stdin)
+	return sources, nil
+}
+
+func selectResearchSource(reader *bufio.Reader, sources []researchSource) (researchSource, error) {
 	fmt.Println("Where is the research?")
 	for i, source := range sources {
 		fmt.Printf("[%d] %s: %s\n", i+1, source.Type, source.Name)
@@ -134,66 +172,63 @@ func runAccept(cmd *cobra.Command, args []string) error {
 
 	choice, err := reader.ReadString('\n')
 	if err != nil {
-		return err
+		return researchSource{}, err
 	}
 	choice = strings.TrimSpace(choice)
 	selected, err := strconv.Atoi(choice)
 	if err != nil {
-		return fmt.Errorf("invalid selection: %s", choice)
+		return researchSource{}, fmt.Errorf("invalid selection: %s", choice)
 	}
 
 	if selected < 1 || selected > len(sources) {
-		return fmt.Errorf("invalid selection: %d", selected)
+		return researchSource{}, fmt.Errorf("invalid selection: %d", selected)
 	}
 
-	selectedSource := sources[selected-1]
+	return sources[selected-1], nil
+}
 
-	// Prompt for epic summary
+func promptEpicSummary(reader *bufio.Reader) (string, error) {
 	fmt.Print("New Epic Summary: ")
 	epicSummary, err := reader.ReadString('\n')
 	if err != nil {
-		return err
+		return "", err
 	}
-	epicSummary = strings.TrimSpace(epicSummary)
+	return strings.TrimSpace(epicSummary), nil
+}
 
-	// Build context for Gemini
+func generateEpicPlan(
+	client jira.JiraClient, cfg *config.Config, ticketID, epicSummary string,
+	selectedSource researchSource, configDir string,
+) (string, error) {
 	context := fmt.Sprintf("Epic Summary: %s\n\nResearch Text:\n%s", epicSummary, selectedSource.Text)
 
-	// Run Q&A flow (cfg already loaded above)
 	geminiClient, err := gemini.NewClient(configDir)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	// Get ticket details to check if it's a spike
 	issues, err := client.SearchTickets(fmt.Sprintf("key = %s", ticketID))
 	var ticketSummary string
 	if err == nil && len(issues) > 0 {
 		ticketSummary = issues[0].Fields.Summary
 	}
 
-	// Use epic summary from context to detect spike - if epic summary starts with SPIKE, treat as spike
-	// Also check original ticket summary if available
-	// Pass epic summary (from context) as the primary identifier, fallback to ticket summary
 	spikeIdentifier := epicSummary
 	if ticketSummary != "" {
 		spikeIdentifier = ticketSummary
 	}
-	// No existing description for epic plan generation
-	// Pass "Epic" as issueTypeName since we're creating an Epic
-	// Note: ticketID is the source ticket, not the new Epic, so we don't pass it for child ticket lookup
+
 	answerInputMethod := cfg.AnswerInputMethod
 	if answerInputMethod == "" {
 		answerInputMethod = defaultInputMethod
 	}
-	plan, err := qa.RunQnAFlow(
+
+	return qa.RunQnAFlow(
 		geminiClient, context, cfg.MaxQuestions, spikeIdentifier, "Epic", "",
 		nil, "", "", answerInputMethod)
-	if err != nil {
-		return err
-	}
+}
 
-	// Print plan and ask for confirmation
+func confirmAndEditPlan(reader *bufio.Reader, plan string) (string, error) {
 	fmt.Println("\nGenerated Epic Plan:")
 	fmt.Println("---")
 	fmt.Println(plan)
@@ -202,247 +237,254 @@ func runAccept(cmd *cobra.Command, args []string) error {
 
 	confirm, err := reader.ReadString('\n')
 	if err != nil {
-		return err
+		return "", err
 	}
 	confirm = strings.TrimSpace(strings.ToLower(confirm))
 
 	if confirm == "e" || confirm == editCommand {
 		editedPlan, err := editor.OpenInEditor(plan)
 		if err != nil {
-			return fmt.Errorf("failed to edit plan: %w", err)
+			return "", fmt.Errorf("failed to edit plan: %w", err)
 		}
 		plan = editedPlan
 	}
 
 	if confirm == "n" || confirm == "no" {
 		fmt.Println("Canceled.")
-		return nil
+		return "", nil
 	}
 
-	// Parse the plan
-	epic, tasks, err := parser.ParseEpicPlan(plan)
-	if err != nil {
-		return fmt.Errorf("failed to parse epic plan: %w", err)
-	}
+	return plan, nil
+}
 
-	// Create the Epic
+func createEpicAndTasks(
+	client jira.JiraClient, cfg *config.Config,
+	epic parser.Epic, tasks []parser.Task,
+) ([]string, error) {
 	project := cfg.DefaultProject
 	if project == "" {
-		return fmt.Errorf("default_project not configured. Please run 'jira init'")
+		return nil, fmt.Errorf("default_project not configured. Please run 'jira init'")
 	}
 
 	epicKey, err := client.CreateTicket(project, "Epic", epic.Title)
 	if err != nil {
-		return fmt.Errorf("failed to create epic: %w", err)
+		return nil, fmt.Errorf("failed to create epic: %w", err)
 	}
 
-	// Update epic description
 	if epic.Description != "" {
 		if err := client.UpdateTicketDescription(epicKey, epic.Description); err != nil {
-			return fmt.Errorf("failed to update epic description: %w", err)
+			return nil, fmt.Errorf("failed to update epic description: %w", err)
 		}
 	}
 
 	fmt.Printf("Created Epic: %s\n", epicKey)
 
-	// Create tasks
 	issueKeys := []string{epicKey}
 	for _, task := range tasks {
 		taskKey, err := client.CreateTicketWithParent(project, "Task", task.Summary, epicKey)
 		if err != nil {
-			return fmt.Errorf("failed to create task: %w", err)
+			return nil, fmt.Errorf("failed to create task: %w", err)
 		}
 		issueKeys = append(issueKeys, taskKey)
 		fmt.Printf("Created Task: %s\n", taskKey)
 	}
 
-	// Ask about sprint assignment
+	return issueKeys, nil
+}
+
+func promptSprintAssignment(client jira.JiraClient, reader *bufio.Reader, issueKeys []string, configDir string) error {
 	fmt.Print("\nAdd this Epic and its tasks to an active Sprint? [y/N] ")
-	sprintChoice, err := reader.ReadString('\n')
+	choice, err := reader.ReadString('\n')
 	if err != nil {
 		return err
 	}
-	sprintChoice = strings.TrimSpace(strings.ToLower(sprintChoice))
-
-	if sprintChoice == "y" || sprintChoice == "yes" {
-		boardID := 1 // Default board ID
-		sprints, err := client.GetActiveSprints(boardID)
-		if err != nil {
-			return err
-		}
-
-		if len(sprints) > 0 {
-			// Load state for recent selections
-			statePath := config.GetStatePath(configDir)
-			state, err := config.LoadState(statePath)
-			if err != nil {
-				// If state can't be loaded, continue without recent list
-				state = &config.State{}
-			}
-
-			fmt.Println("Select sprint:")
-			recent := state.RecentSprints
-			showRecent := len(recent) > 0
-
-			if showRecent {
-				for i, sprintName := range recent {
-					fmt.Printf("[%d] %s\n", i+1, sprintName)
-				}
-				fmt.Printf("[%d] Other...\n", len(recent)+1)
-			} else {
-				for i, sprint := range sprints {
-					fmt.Printf("[%d] %s\n", i+1, sprint.Name)
-				}
-			}
-			fmt.Print("> ")
-
-			choice, err := reader.ReadString('\n')
-			if err != nil {
-				return err
-			}
-			choice = strings.TrimSpace(choice)
-			selected, err := strconv.Atoi(choice)
-			if err != nil {
-				return fmt.Errorf("invalid selection: %s", choice)
-			}
-
-			var sprintID int
-			var selectedSprintName string
-			if showRecent && selected <= len(recent) {
-				// Find sprint by name from recent list
-				sprintName := recent[selected-1]
-				for _, sprint := range sprints {
-					if sprint.Name == sprintName {
-						sprintID = sprint.ID
-						selectedSprintName = sprintName
-						break
-					}
-				}
-			} else {
-				idx := selected - 1
-				if showRecent {
-					idx = selected - len(recent) - 1
-				}
-				if idx >= 0 && idx < len(sprints) {
-					sprintID = sprints[idx].ID
-					selectedSprintName = sprints[idx].Name
-				}
-			}
-
-			if sprintID > 0 {
-				if err := client.AddIssuesToSprint(sprintID, issueKeys); err != nil {
-					return fmt.Errorf("failed to add issues to sprint: %w", err)
-				}
-				// Track this selection
-				if selectedSprintName != "" {
-					state.AddRecentSprint(selectedSprintName)
-					if err := config.SaveState(state, statePath); err != nil {
-						// Log but don't fail - tracking is optional
-						_ = err
-					}
-				}
-				fmt.Printf("Added issues to sprint.\n")
-			}
-		}
+	choice = strings.TrimSpace(strings.ToLower(choice))
+	if choice != "y" && choice != "yes" {
+		return nil
 	}
 
-	// Ask about release assignment
-	fmt.Print("\nAdd this Epic and its tasks to a Release/Fix Version? [y/N] ")
-	releaseChoice, err := reader.ReadString('\n')
-	if err != nil {
+	boardID := 1
+	sprints, err := client.GetActiveSprints(boardID)
+	if err != nil || len(sprints) == 0 {
 		return err
 	}
-	releaseChoice = strings.TrimSpace(strings.ToLower(releaseChoice))
 
-	if releaseChoice == "y" || releaseChoice == "yes" {
-		releases, err := client.GetReleases(project)
-		if err != nil {
-			return err
-		}
-
-		unreleased := []jira.ReleaseParsed{}
-		for _, r := range releases {
-			if !r.Released {
-				unreleased = append(unreleased, r)
-			}
-		}
-
-		if len(unreleased) > 0 {
-			// Load state for recent selections
-			statePath := config.GetStatePath(configDir)
-			state, err := config.LoadState(statePath)
-			if err != nil {
-				// If state can't be loaded, continue without recent list
-				state = &config.State{}
-			}
-
-			fmt.Println("Select release:")
-			recent := state.RecentReleases
-			showRecent := len(recent) > 0
-
-			if showRecent {
-				for i, releaseName := range recent {
-					fmt.Printf("[%d] %s\n", i+1, releaseName)
-				}
-				fmt.Printf("[%d] Other...\n", len(recent)+1)
-			} else {
-				for i, release := range unreleased {
-					fmt.Printf("[%d] %s\n", i+1, release.Name)
-				}
-			}
-			fmt.Print("> ")
-
-			choice, err := reader.ReadString('\n')
-			if err != nil {
-				return err
-			}
-			choice = strings.TrimSpace(choice)
-			selected, err := strconv.Atoi(choice)
-			if err != nil {
-				return fmt.Errorf("invalid selection: %s", choice)
-			}
-
-			var releaseID string
-			var selectedReleaseName string
-			if showRecent && selected <= len(recent) {
-				// Find release by name from recent list
-				releaseName := recent[selected-1]
-				for _, r := range unreleased {
-					if r.Name == releaseName {
-						releaseID = r.ID
-						selectedReleaseName = releaseName
-						break
-					}
-				}
-			} else {
-				idx := selected - 1
-				if showRecent {
-					idx = selected - len(recent) - 1
-				}
-				if idx >= 0 && idx < len(unreleased) {
-					releaseID = unreleased[idx].ID
-					selectedReleaseName = unreleased[idx].Name
-				}
-			}
-
-			if releaseID != "" {
-				if err := client.AddIssuesToRelease(releaseID, issueKeys); err != nil {
-					return fmt.Errorf("failed to add issues to release: %w", err)
-				}
-				// Track this selection
-				if selectedReleaseName != "" {
-					state.AddRecentRelease(selectedReleaseName)
-					if err := config.SaveState(state, statePath); err != nil {
-						// Log but don't fail - tracking is optional
-						_ = err
-					}
-				}
-				fmt.Printf("Added issues to release.\n")
-			}
-		}
+	statePath := config.GetStatePath(configDir)
+	state, err := config.LoadState(statePath)
+	if err != nil {
+		state = &config.State{}
 	}
 
+	sprintID, sprintName, err := selectSprint(reader, sprints, state.RecentSprints)
+	if err != nil || sprintID == 0 {
+		return err
+	}
+
+	if err := client.AddIssuesToSprint(sprintID, issueKeys); err != nil {
+		return fmt.Errorf("failed to add issues to sprint: %w", err)
+	}
+
+	if sprintName != "" {
+		state.AddRecentSprint(sprintName)
+		if err := config.SaveState(state, statePath); err != nil {
+			_ = err // Ignore - state saving is optional
+		}
+	}
+	fmt.Printf("Added issues to sprint.\n")
 	return nil
+}
+
+func selectSprint(
+	reader *bufio.Reader, sprints []jira.SprintParsed, recent []string,
+) (sprintID int, sprintName string, err error) {
+	showRecent := len(recent) > 0
+	if showRecent {
+		fmt.Println("Select sprint:")
+		for i, sprintName := range recent {
+			fmt.Printf("[%d] %s\n", i+1, sprintName)
+		}
+		fmt.Printf("[%d] Other...\n", len(recent)+1)
+	} else {
+		fmt.Println("Select sprint:")
+		for i, sprint := range sprints {
+			fmt.Printf("[%d] %s\n", i+1, sprint.Name)
+		}
+	}
+	fmt.Print("> ")
+
+	choice, err := reader.ReadString('\n')
+	if err != nil {
+		return 0, "", err
+	}
+	choice = strings.TrimSpace(choice)
+	selected, err := strconv.Atoi(choice)
+	if err != nil {
+		return 0, "", fmt.Errorf("invalid selection: %s", choice)
+	}
+
+	if showRecent && selected <= len(recent) {
+		sprintName := recent[selected-1]
+		for _, sprint := range sprints {
+			if sprint.Name == sprintName {
+				return sprint.ID, sprintName, nil
+			}
+		}
+		return 0, "", fmt.Errorf("sprint not found: %s", sprintName)
+	}
+
+	idx := selected - 1
+	if showRecent {
+		idx = selected - len(recent) - 1
+	}
+	if idx >= 0 && idx < len(sprints) {
+		return sprints[idx].ID, sprints[idx].Name, nil
+	}
+
+	return 0, "", fmt.Errorf("invalid selection: %d", selected)
+}
+
+func promptReleaseAssignment(
+	client jira.JiraClient, reader *bufio.Reader, project string,
+	issueKeys []string, configDir string,
+) error {
+	fmt.Print("\nAdd this Epic and its tasks to a Release/Fix Version? [y/N] ")
+	choice, err := reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	choice = strings.TrimSpace(strings.ToLower(choice))
+	if choice != "y" && choice != "yes" {
+		return nil
+	}
+
+	releases, err := client.GetReleases(project)
+	if err != nil {
+		return err
+	}
+
+	unreleased := []jira.ReleaseParsed{}
+	for _, r := range releases {
+		if !r.Released {
+			unreleased = append(unreleased, r)
+		}
+	}
+
+	if len(unreleased) == 0 {
+		return nil
+	}
+
+	statePath := config.GetStatePath(configDir)
+	state, err := config.LoadState(statePath)
+	if err != nil {
+		state = &config.State{}
+	}
+
+	releaseID, releaseName, err := selectRelease(reader, unreleased, state.RecentReleases)
+	if err != nil || releaseID == "" {
+		return err
+	}
+
+	if err := client.AddIssuesToRelease(releaseID, issueKeys); err != nil {
+		return fmt.Errorf("failed to add issues to release: %w", err)
+	}
+
+	if releaseName != "" {
+		state.AddRecentRelease(releaseName)
+		if err := config.SaveState(state, statePath); err != nil {
+			_ = err // Ignore - state saving is optional
+		}
+	}
+	fmt.Printf("Added issues to release.\n")
+	return nil
+}
+
+func selectRelease(
+	reader *bufio.Reader, unreleased []jira.ReleaseParsed, recent []string,
+) (releaseID, releaseName string, err error) {
+	showRecent := len(recent) > 0
+	if showRecent {
+		fmt.Println("Select release:")
+		for i, releaseName := range recent {
+			fmt.Printf("[%d] %s\n", i+1, releaseName)
+		}
+		fmt.Printf("[%d] Other...\n", len(recent)+1)
+	} else {
+		fmt.Println("Select release:")
+		for i, release := range unreleased {
+			fmt.Printf("[%d] %s\n", i+1, release.Name)
+		}
+	}
+	fmt.Print("> ")
+
+	choice, err := reader.ReadString('\n')
+	if err != nil {
+		return "", "", err
+	}
+	choice = strings.TrimSpace(choice)
+	selected, err := strconv.Atoi(choice)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid selection: %s", choice)
+	}
+
+	if showRecent && selected <= len(recent) {
+		releaseName := recent[selected-1]
+		for _, r := range unreleased {
+			if r.Name == releaseName {
+				return r.ID, releaseName, nil
+			}
+		}
+		return "", "", fmt.Errorf("release not found: %s", releaseName)
+	}
+
+	idx := selected - 1
+	if showRecent {
+		idx = selected - len(recent) - 1
+	}
+	if idx >= 0 && idx < len(unreleased) {
+		return unreleased[idx].ID, unreleased[idx].Name, nil
+	}
+
+	return "", "", fmt.Errorf("invalid selection: %d", selected)
 }
 
 func init() {

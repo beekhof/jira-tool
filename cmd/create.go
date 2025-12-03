@@ -37,172 +37,211 @@ This is equivalent to:
 	RunE: runCreate,
 }
 
-func runCreate(cmd *cobra.Command, args []string) error {
-	// Check if first argument is "spike" (case-insensitive)
-	// If so, prepend "SPIKE: " to the rest of the summary
-	summary := strings.Join(args, " ")
-	if len(args) > 0 && strings.EqualFold(args[0], "spike") {
-		// If it's "spike", join the rest and prepend "SPIKE: "
-		if len(args) > 1 {
-			summary = "SPIKE: " + strings.Join(args[1:], " ")
-		} else {
-			// Just "spike" with no other text
-			summary = "SPIKE"
-		}
-	}
+func runCreate(_ *cobra.Command, args []string) error {
+	summary := normalizeSummary(args)
 
-	// Get config directory
 	configDir := GetConfigDir()
-
-	// Load config to get defaults
 	configPath := config.GetConfigPath(configDir)
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Determine project and type
-	project := cfg.DefaultProject
-	if projectFlag != "" {
-		project = projectFlag
-	}
-	if project == "" {
-		return fmt.Errorf("project not specified. Use --project flag or set default_project in config")
+	project, taskType, err := determineProjectAndType(cfg)
+	if err != nil {
+		return err
 	}
 
-	taskType := cfg.DefaultTaskType
-	if typeFlag != "" {
-		taskType = typeFlag
-	}
-	if taskType == "" {
-		return fmt.Errorf("task type not specified. Use --type flag or set default_task_type in config")
-	}
-
-	// Create Jira client
 	client, err := jira.NewClient(configDir, GetNoCache())
 	if err != nil {
 		return err
 	}
 
-	// Handle parent ticket selection
-	var parentKey string
-	var isEpic bool
 	reader := bufio.NewReader(os.Stdin)
-
-	if parentFlag != "" {
-		// Validate parent ticket exists
-		parentIssue, err := client.GetIssue(parentFlag)
-		if err != nil {
-			return fmt.Errorf("parent ticket %s not found or not accessible: %w", parentFlag, err)
-		}
-		parentKey = parentFlag
-		isEpic = jira.IsEpic(parentIssue)
-	} else {
-		// Interactive selection
-		selectedParent, err := selectParentTicket(client, reader, cfg, project, configPath)
-		if err != nil {
-			// If user cancels or error, proceed without parent
-			fmt.Printf("Skipping parent ticket selection: %v\n", err)
-		} else {
-			parentKey = selectedParent
-			// Fetch parent to check if Epic
-			parentIssue, err := client.GetIssue(parentKey)
-			if err != nil {
-				return fmt.Errorf("failed to fetch parent ticket: %w", err)
-			}
-			isEpic = jira.IsEpic(parentIssue)
-		}
+	parentKey, isEpic, err := handleParentSelection(client, reader, cfg, project, configPath)
+	if err != nil {
+		return err
 	}
 
-	// Create the ticket with or without parent
-	var ticketKey string
-	if parentKey != "" {
-		if isEpic {
-			// Use Epic Link field
-			epicLinkFieldID := cfg.EpicLinkFieldID
-			if epicLinkFieldID == "" {
-				// Attempt auto-detection
-				epicLinkFieldID, err = client.DetectEpicLinkField(project)
-				if err != nil {
-					return fmt.Errorf("failed to detect Epic Link field: %w", err)
-				}
-				if epicLinkFieldID == "" {
-					// Prompt user for field ID
-					fmt.Print("Epic Link field not detected. " +
-						"Please enter the custom field ID (e.g., customfield_10011) or press Enter to skip: ")
-					fieldIDInput, err := reader.ReadString('\n')
-					if err != nil {
-						return fmt.Errorf("failed to read input: %w", err)
-					}
-					fieldIDInput = strings.TrimSpace(fieldIDInput)
-					if fieldIDInput == "" {
-						return fmt.Errorf("Epic Link field ID required for Epic parent")
-					}
-					if !strings.HasPrefix(fieldIDInput, "customfield_") {
-						return fmt.Errorf("Invalid Epic Link field ID format. Must start with 'customfield_'")
-					}
-					epicLinkFieldID = fieldIDInput
-					// Save to config
-					cfg.EpicLinkFieldID = epicLinkFieldID
-					if err := config.SaveConfig(cfg, configPath); err != nil {
-						// Log but don't fail
-						fmt.Printf("Warning: Could not save Epic Link field ID to config: %v\n", err)
-					}
-				} else {
-					// Save detected field ID to config
-					cfg.EpicLinkFieldID = epicLinkFieldID
-					if err := config.SaveConfig(cfg, configPath); err != nil {
-						// Log but don't fail
-						fmt.Printf("Warning: Could not save Epic Link field ID to config: %v\n", err)
-					}
-				}
-			}
-			ticketKey, err = client.CreateTicketWithEpicLink(project, taskType, summary, parentKey, epicLinkFieldID)
-		} else {
-			// Use Parent Link field
-			ticketKey, err = client.CreateTicketWithParent(project, taskType, summary, parentKey)
-		}
-		if err != nil {
-			return err
-		}
-	} else {
-		// No parent - create normally
-		ticketKey, err = client.CreateTicket(project, taskType, summary)
-		if err != nil {
-			return err
-		}
+	ticketKey, err := createTicketWithParent(
+		client, reader, cfg, project, taskType, summary, parentKey, isEpic, configPath)
+	if err != nil {
+		return err
 	}
 
 	fmt.Printf("Ticket %s created.\n", ticketKey)
 
-	// Update recent parent tickets in state
-	if parentKey != "" {
-		statePath := config.GetStatePath(configDir)
-		state, err := config.LoadState(statePath)
+	updateRecentParentTickets(configDir, parentKey, ticketKey)
+
+	if err := handleDescriptionGeneration(client, reader, cfg, configDir, summary, taskType, ticketKey); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func normalizeSummary(args []string) string {
+	summary := strings.Join(args, " ")
+	if len(args) > 0 && strings.EqualFold(args[0], "spike") {
+		if len(args) > 1 {
+			summary = "SPIKE: " + strings.Join(args[1:], " ")
+		} else {
+			summary = "SPIKE"
+		}
+	}
+	return summary
+}
+
+func determineProjectAndType(cfg *config.Config) (project, taskType string, err error) {
+	project = cfg.DefaultProject
+	if projectFlag != "" {
+		project = projectFlag
+	}
+	if project == "" {
+		return "", "", fmt.Errorf("project not specified. Use --project flag or set default_project in config")
+	}
+
+	taskType = cfg.DefaultTaskType
+	if typeFlag != "" {
+		taskType = typeFlag
+	}
+	if taskType == "" {
+		return "", "", fmt.Errorf("task type not specified. Use --type flag or set default_task_type in config")
+	}
+
+	return project, taskType, nil
+}
+
+func handleParentSelection(
+	client jira.JiraClient, reader *bufio.Reader, cfg *config.Config,
+	project, configPath string,
+) (parentKey string, isEpic bool, err error) {
+	if parentFlag != "" {
+		return handleParentFlag(client, parentFlag)
+	}
+
+	return handleInteractiveParentSelection(client, reader, cfg, project, configPath)
+}
+
+func handleParentFlag(client jira.JiraClient, parentFlag string) (parentKey string, isEpic bool, err error) {
+	parentIssue, err := client.GetIssue(parentFlag)
+	if err != nil {
+		return "", false, fmt.Errorf("parent ticket %s not found or not accessible: %w", parentFlag, err)
+	}
+	return parentFlag, jira.IsEpic(parentIssue), nil
+}
+
+func handleInteractiveParentSelection(
+	client jira.JiraClient, reader *bufio.Reader, cfg *config.Config,
+	project, configPath string,
+) (parentKey string, isEpic bool, err error) {
+	selectedParent, err := selectParentTicket(client, reader, cfg, project, configPath)
+	if err != nil {
+		fmt.Printf("Skipping parent ticket selection: %v\n", err)
+		return "", false, nil
+	}
+
+	parentIssue, err := client.GetIssue(selectedParent)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to fetch parent ticket: %w", err)
+	}
+
+	return selectedParent, jira.IsEpic(parentIssue), nil
+}
+
+func createTicketWithParent(
+	client jira.JiraClient, reader *bufio.Reader, cfg *config.Config,
+	project, taskType, summary, parentKey string, isEpic bool, configPath string,
+) (string, error) {
+	if parentKey == "" {
+		return client.CreateTicket(project, taskType, summary)
+	}
+
+	if isEpic {
+		return createTicketWithEpicLink(client, reader, cfg, project, taskType, summary, parentKey, configPath)
+	}
+
+	return client.CreateTicketWithParent(project, taskType, summary, parentKey)
+}
+
+func createTicketWithEpicLink(
+	client jira.JiraClient, reader *bufio.Reader, cfg *config.Config,
+	project, taskType, summary, parentKey, configPath string,
+) (string, error) {
+	epicLinkFieldID := cfg.EpicLinkFieldID
+	if epicLinkFieldID == "" {
+		var err error
+		epicLinkFieldID, err = detectAndPromptEpicLinkField(client, reader, project, cfg, configPath)
 		if err != nil {
-			state = &config.State{}
-		}
-		state.AddRecentParentTicket(parentKey)
-		state.AddRecentParentTicket(ticketKey) // Also add newly created ticket
-		if err := config.SaveState(state, statePath); err != nil {
-			// Log but don't fail - tracking is optional
-			fmt.Printf("Warning: Could not save recent parent tickets: %v\n", err)
-		}
-	} else {
-		// Add newly created ticket to recent list even without parent
-		statePath := config.GetStatePath(configDir)
-		state, err := config.LoadState(statePath)
-		if err != nil {
-			state = &config.State{}
-		}
-		state.AddRecentParentTicket(ticketKey)
-		if err := config.SaveState(state, statePath); err != nil {
-			// Log but don't fail
-			_ = err
+			return "", err
 		}
 	}
 
-	// Ask if user wants to use Gemini to generate description
+	return client.CreateTicketWithEpicLink(project, taskType, summary, parentKey, epicLinkFieldID)
+}
+
+func detectAndPromptEpicLinkField(
+	client jira.JiraClient, reader *bufio.Reader, project string,
+	cfg *config.Config, configPath string,
+) (string, error) {
+	epicLinkFieldID, err := client.DetectEpicLinkField(project)
+	if err != nil {
+		return "", fmt.Errorf("failed to detect Epic Link field: %w", err)
+	}
+
+	if epicLinkFieldID == "" {
+		return promptForEpicLinkFieldID(reader, cfg, configPath)
+	}
+
+	cfg.EpicLinkFieldID = epicLinkFieldID
+	if err := config.SaveConfig(cfg, configPath); err != nil {
+		_ = err // Ignore - config saving is optional
+	}
+	return epicLinkFieldID, nil
+}
+
+func promptForEpicLinkFieldID(reader *bufio.Reader, cfg *config.Config, configPath string) (string, error) {
+	fmt.Print("Epic Link field not detected. " +
+		"Please enter the custom field ID (e.g., customfield_10011) or press Enter to skip: ")
+	fieldIDInput, err := reader.ReadString('\n')
+	if err != nil {
+		return "", fmt.Errorf("failed to read input: %w", err)
+	}
+	fieldIDInput = strings.TrimSpace(fieldIDInput)
+	if fieldIDInput == "" {
+		return "", fmt.Errorf("Epic Link field ID required for Epic parent")
+	}
+	if !strings.HasPrefix(fieldIDInput, "customfield_") {
+		return "", fmt.Errorf("Invalid Epic Link field ID format. Must start with 'customfield_'")
+	}
+
+	cfg.EpicLinkFieldID = fieldIDInput
+	if err := config.SaveConfig(cfg, configPath); err != nil {
+		_ = err // Ignore - config saving is optional
+	}
+	return fieldIDInput, nil
+}
+
+func updateRecentParentTickets(configDir, parentKey, ticketKey string) {
+	statePath := config.GetStatePath(configDir)
+	state, err := config.LoadState(statePath)
+	if err != nil {
+		state = &config.State{}
+	}
+
+	if parentKey != "" {
+		state.AddRecentParentTicket(parentKey)
+	}
+	state.AddRecentParentTicket(ticketKey)
+	if err := config.SaveState(state, statePath); err != nil {
+		_ = err // Ignore - state saving is optional
+	}
+}
+
+func handleDescriptionGeneration(
+	client jira.JiraClient, reader *bufio.Reader, cfg *config.Config,
+	configDir, summary, taskType, ticketKey string,
+) error {
 	fmt.Print("Would you like to use Gemini to generate the description? [y/N] ")
 	response, err := reader.ReadString('\n')
 	if err != nil {
@@ -210,285 +249,309 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	}
 	response = strings.TrimSpace(strings.ToLower(response))
 
-	if response == "y" || response == "yes" {
-		// Load config to get max questions
-		configPath := config.GetConfigPath(configDir)
-		cfg, err := config.LoadConfig(configPath)
+	if response != "y" && response != "yes" {
+		return nil
+	}
+
+	return generateAndUpdateDescription(client, reader, cfg, configDir, summary, taskType, ticketKey)
+}
+
+func generateAndUpdateDescription(
+	client jira.JiraClient, reader *bufio.Reader, cfg *config.Config,
+	configDir, summary, taskType, ticketKey string,
+) error {
+	geminiClient, err := gemini.NewClient(configDir)
+	if err != nil {
+		return err
+	}
+
+	answerInputMethod := cfg.AnswerInputMethod
+	if answerInputMethod == "" {
+		answerInputMethod = defaultInputMethod
+	}
+
+	description, err := qa.RunQnAFlow(
+		geminiClient, summary, cfg.MaxQuestions, summary, taskType, "",
+		client, ticketKey, cfg.EpicLinkFieldID, answerInputMethod)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("\nGenerated description:")
+	fmt.Println("---")
+	fmt.Println(description)
+	fmt.Println("---")
+	fmt.Print("\nUpdate ticket with this description? [Y/n/e(dit)] ")
+
+	confirm, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read input: %w", err)
+	}
+	confirm = strings.TrimSpace(strings.ToLower(confirm))
+
+	if confirm == "e" || confirm == "edit" {
+		editedDescription, err := editor.OpenInEditor(description)
 		if err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
+			return fmt.Errorf("failed to edit description: %w", err)
 		}
+		description = editedDescription
+	}
 
-		// Initialize Gemini client
-		geminiClient, err := gemini.NewClient(configDir)
-		if err != nil {
-			return err
-		}
+	if confirm == "n" || confirm == "no" {
+		return nil
+	}
 
-		// Run Q&A flow (pass summary to detect spike based on SPIKE prefix,
-		// pass taskType as issueTypeName, no existing description for new tickets,
-		// include child tickets in context)
-		answerInputMethod := cfg.AnswerInputMethod
-		if answerInputMethod == "" {
-			answerInputMethod = defaultInputMethod
-		}
-		description, err := qa.RunQnAFlow(
-			geminiClient, summary, cfg.MaxQuestions, summary, taskType, "",
-			client, ticketKey, cfg.EpicLinkFieldID, answerInputMethod)
-		if err != nil {
-			return err
-		}
+	if err := client.UpdateTicketDescription(ticketKey, description); err != nil {
+		return err
+	}
+	fmt.Printf("Updated %s with description.\n", ticketKey)
 
-		// Print the generated description
-		fmt.Println("\nGenerated description:")
-		fmt.Println("---")
-		fmt.Println(description)
-		fmt.Println("---")
+	return promptForReview(client, reader, cfg, ticketKey)
+}
 
-		// Ask for confirmation
-		fmt.Print("\nUpdate ticket with this description? [Y/n/e(dit)] ")
-		confirm, err := reader.ReadString('\n')
-		if err != nil {
-			return fmt.Errorf("failed to read input: %w", err)
-		}
-		confirm = strings.TrimSpace(strings.ToLower(confirm))
+func promptForReview(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticketKey string) error {
+	fmt.Print("\nWould you like to review this ticket? [y/N] ")
+	reviewResponse, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read input: %w", err)
+	}
+	reviewResponse = strings.TrimSpace(strings.ToLower(reviewResponse))
 
-		if confirm == "e" || confirm == "edit" {
-			// Open in editor
-			editedDescription, err := editor.OpenInEditor(description)
-			if err != nil {
-				return fmt.Errorf("failed to edit description: %w", err)
-			}
-			description = editedDescription
-		}
+	if reviewResponse != "y" && reviewResponse != "yes" {
+		return nil
+	}
 
-		if confirm != "n" && confirm != "no" {
-			// Update the ticket
-			if err := client.UpdateTicketDescription(ticketKey, description); err != nil {
-				return err
-			}
-			fmt.Printf("Updated %s with description.\n", ticketKey)
+	filter := GetTicketFilter(cfg)
+	jql := fmt.Sprintf("key = %s", ticketKey)
+	jql = jira.ApplyTicketFilter(jql, filter)
+	issues, err := client.SearchTickets(jql)
+	if err != nil {
+		return fmt.Errorf("failed to fetch ticket: %w", err)
+	}
+	if len(issues) == 0 {
+		return fmt.Errorf("ticket %s not found", ticketKey)
+	}
 
-			// Prompt to review the ticket
-			fmt.Print("\nWould you like to review this ticket? [y/N] ")
-			reviewResponse, err := reader.ReadString('\n')
-			if err != nil {
-				return fmt.Errorf("failed to read input: %w", err)
-			}
-			reviewResponse = strings.TrimSpace(strings.ToLower(reviewResponse))
-
-			if reviewResponse == "y" || reviewResponse == "yes" {
-				// Get ticket filter
-				filter := GetTicketFilter(cfg)
-				// Fetch updated ticket details
-				jql := fmt.Sprintf("key = %s", ticketKey)
-				jql = jira.ApplyTicketFilter(jql, filter)
-				issues, err := client.SearchTickets(jql)
-				if err != nil {
-					return fmt.Errorf("failed to fetch ticket: %w", err)
-				}
-				if len(issues) == 0 {
-					return fmt.Errorf("ticket %s not found", ticketKey)
-				}
-
-				selectedIssue := issues[0]
-				if err := reviewTicket(client, reader, cfg, &selectedIssue); err != nil {
-					return fmt.Errorf("error reviewing ticket: %w", err)
-				}
-			}
-		}
+	selectedIssue := issues[0]
+	if err := reviewTicket(client, reader, cfg, &selectedIssue); err != nil {
+		return fmt.Errorf("error reviewing ticket: %w", err)
 	}
 
 	return nil
 }
 
 // selectParentTicket allows the user to interactively select a parent ticket
-func selectParentTicket(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, projectKey string, configPath string) (string, error) {
+func selectParentTicket(
+	client jira.JiraClient, reader *bufio.Reader, cfg *config.Config,
+	projectKey, _ string,
+) (string, error) {
 	configDir := GetConfigDir()
 	statePath := config.GetStatePath(configDir)
 	state, err := config.LoadState(statePath)
 	if err != nil {
-		// If state can't be loaded, continue without recent list
 		state = &config.State{}
 	}
 
-	// Get ticket filter
-	filter := GetTicketFilter(cfg)
+	validRecentTickets := getValidRecentTickets(client, state.RecentParentTickets)
 
-	// Get recent parent tickets and filter to valid ones
-	recentTickets := state.RecentParentTickets
-	var validRecentTickets []string
-	if len(recentTickets) > 0 {
-		validRecentTickets, err = jira.FilterValidParentTickets(client, recentTickets)
-		if err != nil {
-			// Log but continue - filtering is best effort
-			validRecentTickets = []string{}
-		}
-	}
-
-	// Show recent tickets if available
 	showRecent := len(validRecentTickets) > 0
 	if showRecent {
-		fmt.Println("Recent parent tickets:")
-		for i, ticketKey := range validRecentTickets {
-			// Fetch ticket to show details
-			issue, err := client.GetIssue(ticketKey)
-			if err != nil {
-				// Skip if can't fetch
-				continue
-			}
-			issueType := issue.Fields.IssueType.Name
-			summary := issue.Fields.Summary
-			if len(summary) > 50 {
-				summary = summary[:47] + "..."
-			}
-			fmt.Printf("[%d] %s [%s]: %s\n", i+1, ticketKey, issueType, summary)
-		}
-		fmt.Printf("[%d] Other...\n", len(validRecentTickets)+1)
+		displayRecentParentTickets(client, validRecentTickets)
 	} else {
-		fmt.Println("No recent parent tickets. Searching all tickets in project...")
-		// Search for all tickets in project that could be parents
-		issues, err := client.SearchTickets(fmt.Sprintf("project = %s ORDER BY updated DESC", projectKey))
-		if err != nil {
-			return "", fmt.Errorf("failed to search tickets: %w", err)
-		}
-		if len(issues) == 0 {
-			return "", fmt.Errorf("no tickets found in project %s", projectKey)
-		}
-
-		// Filter to Epics and parent tickets
-		var validIssues []jira.Issue
-		for i := range issues {
-			issue := &issues[i]
-			if jira.IsEpic(issue) {
-				validIssues = append(validIssues, *issue)
-			} else {
-				// Check if it has subtasks
-				subtaskJQL := fmt.Sprintf("parent = %s", issue.Key)
-				subtaskJQL = jira.ApplyTicketFilter(subtaskJQL, filter)
-				subtasks, err := client.SearchTickets(subtaskJQL)
-				if err == nil && len(subtasks) > 0 {
-					validIssues = append(validIssues, *issue)
-				}
-			}
-		}
-
-		if len(validIssues) == 0 {
-			return "", fmt.Errorf("no valid parent tickets found in project %s", projectKey)
-		}
-
-		// Show first 20 valid tickets
-		maxShow := 20
-		if len(validIssues) > maxShow {
-			validIssues = validIssues[:maxShow]
-		}
-
-		fmt.Println("Select parent ticket:")
-		for i := range validIssues {
-			issue := &validIssues[i]
-			summary := issue.Fields.Summary
-			if len(summary) > 50 {
-				summary = summary[:47] + "..."
-			}
-			fmt.Printf("[%d] %s [%s]: %s\n", i+1, issue.Key, issue.Fields.IssueType.Name, summary)
+		if err := displayAllParentTickets(client, cfg, projectKey); err != nil {
+			return "", err
 		}
 	}
 
+	choice, err := readParentTicketChoice(reader)
+	if err != nil {
+		return "", err
+	}
+
+	if ticketKey := validateDirectTicketKey(client, choice); ticketKey != "" {
+		return ticketKey, nil
+	}
+
+	return processParentTicketSelection(client, reader, cfg, projectKey, choice, validRecentTickets, showRecent)
+}
+
+func getValidRecentTickets(client jira.JiraClient, recentTickets []string) []string {
+	if len(recentTickets) == 0 {
+		return []string{}
+	}
+
+	validRecentTickets, err := jira.FilterValidParentTickets(client, recentTickets)
+	if err != nil {
+		return []string{}
+	}
+	return validRecentTickets
+}
+
+func displayRecentParentTickets(client jira.JiraClient, validRecentTickets []string) {
+	fmt.Println("Recent parent tickets:")
+	for i, ticketKey := range validRecentTickets {
+		issue, err := client.GetIssue(ticketKey)
+		if err != nil {
+			continue
+		}
+		issueType := issue.Fields.IssueType.Name
+		summary := truncateSummary(issue.Fields.Summary, 50)
+		fmt.Printf("[%d] %s [%s]: %s\n", i+1, ticketKey, issueType, summary)
+	}
+	fmt.Printf("[%d] Other...\n", len(validRecentTickets)+1)
+}
+
+func displayAllParentTickets(client jira.JiraClient, cfg *config.Config, projectKey string) error {
+	fmt.Println("No recent parent tickets. Searching all tickets in project...")
+	issues, err := client.SearchTickets(fmt.Sprintf("project = %s ORDER BY updated DESC", projectKey))
+	if err != nil {
+		return fmt.Errorf("failed to search tickets: %w", err)
+	}
+	if len(issues) == 0 {
+		return fmt.Errorf("no tickets found in project %s", projectKey)
+	}
+
+	validIssues := filterValidParentIssues(client, cfg, issues)
+	if len(validIssues) == 0 {
+		return fmt.Errorf("no valid parent tickets found in project %s", projectKey)
+	}
+
+	displayParentTicketList(validIssues[:minInt(20, len(validIssues))])
+	return nil
+}
+
+func filterValidParentIssues(client jira.JiraClient, cfg *config.Config, issues []jira.Issue) []jira.Issue {
+	var validIssues []jira.Issue
+	filter := GetTicketFilter(cfg)
+
+	for i := range issues {
+		issue := &issues[i]
+		if jira.IsEpic(issue) {
+			validIssues = append(validIssues, *issue)
+		} else if hasSubtasks(client, issue.Key, filter) {
+			validIssues = append(validIssues, *issue)
+		}
+	}
+
+	return validIssues
+}
+
+func hasSubtasks(client jira.JiraClient, issueKey, filter string) bool {
+	subtaskJQL := fmt.Sprintf("parent = %s", issueKey)
+	subtaskJQL = jira.ApplyTicketFilter(subtaskJQL, filter)
+	subtasks, err := client.SearchTickets(subtaskJQL)
+	return err == nil && len(subtasks) > 0
+}
+
+func displayParentTicketList(validIssues []jira.Issue) {
+	fmt.Println("Select parent ticket:")
+	for i := range validIssues {
+		issue := &validIssues[i]
+		summary := truncateSummary(issue.Fields.Summary, 50)
+		fmt.Printf("[%d] %s [%s]: %s\n", i+1, issue.Key, issue.Fields.IssueType.Name, summary)
+	}
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func readParentTicketChoice(reader *bufio.Reader) (string, error) {
 	fmt.Print("> ")
 	choice, err := reader.ReadString('\n')
 	if err != nil {
 		return "", fmt.Errorf("failed to read input: %w", err)
 	}
-	choice = strings.TrimSpace(choice)
+	return strings.TrimSpace(choice), nil
+}
 
-	// Allow user to enter ticket key directly
-	if choice != "" && !strings.HasPrefix(choice, "[") {
-		// Check if it looks like a ticket key (e.g., PROJ-123)
-		if strings.Contains(choice, "-") {
-			// Validate it exists
-			_, err := client.GetIssue(choice)
-			if err != nil {
-				return "", fmt.Errorf("ticket %s not found: %w", choice, err)
-			}
-			return choice, nil
-		}
+func validateDirectTicketKey(client jira.JiraClient, choice string) string {
+	if choice == "" || strings.HasPrefix(choice, "[") {
+		return ""
+	}
+	if !strings.Contains(choice, "-") {
+		return ""
 	}
 
-	// Parse as number
+	_, err := client.GetIssue(choice)
+	if err != nil {
+		return ""
+	}
+	return choice
+}
+
+func processParentTicketSelection(
+	client jira.JiraClient, reader *bufio.Reader, cfg *config.Config,
+	projectKey, choice string, validRecentTickets []string, showRecent bool,
+) (string, error) {
 	selected, err := strconv.Atoi(choice)
 	if err != nil {
 		return "", fmt.Errorf("invalid selection: %s", choice)
 	}
 
-	var selectedTicketKey string
 	if showRecent && selected <= len(validRecentTickets) {
-		selectedTicketKey = validRecentTickets[selected-1]
-	} else if showRecent && selected == len(validRecentTickets)+1 {
-		// "Other..." selected - search all tickets
-		// Get ticket filter
-		filter := GetTicketFilter(cfg)
-		jql := fmt.Sprintf("project = %s ORDER BY updated DESC", projectKey)
-		jql = jira.ApplyTicketFilter(jql, filter)
-		issues, err := client.SearchTickets(jql)
-		if err != nil {
-			return "", fmt.Errorf("failed to search tickets: %w", err)
-		}
+		return validRecentTickets[selected-1], nil
+	}
 
-		// Filter and show
-		var validIssues []jira.Issue
-		for i := range issues {
-			issue := &issues[i]
-			if jira.IsEpic(issue) {
+	if showRecent && selected == len(validRecentTickets)+1 {
+		return selectFromAllParentTickets(client, reader, cfg, projectKey)
+	}
+
+	return "", fmt.Errorf("invalid selection: %d", selected)
+}
+
+func selectFromAllParentTickets(
+	client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, projectKey string,
+) (string, error) {
+	filter := GetTicketFilter(cfg)
+	jql := fmt.Sprintf("project = %s ORDER BY updated DESC", projectKey)
+	jql = jira.ApplyTicketFilter(jql, filter)
+	issues, err := client.SearchTickets(jql)
+	if err != nil {
+		return "", fmt.Errorf("failed to search tickets: %w", err)
+	}
+
+	validIssues := filterValidParentIssuesSimple(client, issues)
+	if len(validIssues) == 0 {
+		return "", fmt.Errorf("no valid parent tickets found")
+	}
+
+	displayParentTicketList(validIssues[:minInt(20, len(validIssues))])
+	fmt.Print("> ")
+
+	choice2, err := reader.ReadString('\n')
+	if err != nil {
+		return "", fmt.Errorf("failed to read input: %w", err)
+	}
+	choice2 = strings.TrimSpace(choice2)
+	selected2, err := strconv.Atoi(choice2)
+	if err != nil {
+		return "", fmt.Errorf("invalid selection: %s", choice2)
+	}
+	if selected2 < 1 || selected2 > len(validIssues) {
+		return "", fmt.Errorf("invalid selection: %d", selected2)
+	}
+
+	return validIssues[selected2-1].Key, nil
+}
+
+func filterValidParentIssuesSimple(client jira.JiraClient, issues []jira.Issue) []jira.Issue {
+	var validIssues []jira.Issue
+	for i := range issues {
+		issue := &issues[i]
+		if jira.IsEpic(issue) {
+			validIssues = append(validIssues, *issue)
+		} else {
+			subtasks, err := client.SearchTickets(fmt.Sprintf("parent = %s", issue.Key))
+			if err == nil && len(subtasks) > 0 {
 				validIssues = append(validIssues, *issue)
-			} else {
-				subtasks, err := client.SearchTickets(fmt.Sprintf("parent = %s", issue.Key))
-				if err == nil && len(subtasks) > 0 {
-					validIssues = append(validIssues, *issue)
-				}
 			}
 		}
-
-		if len(validIssues) == 0 {
-			return "", fmt.Errorf("no valid parent tickets found")
-		}
-
-		maxShow := 20
-		if len(validIssues) > maxShow {
-			validIssues = validIssues[:maxShow]
-		}
-
-		fmt.Println("Select parent ticket:")
-		for i := range validIssues {
-			issue := &validIssues[i]
-			summary := issue.Fields.Summary
-			if len(summary) > 50 {
-				summary = summary[:47] + "..."
-			}
-			fmt.Printf("[%d] %s [%s]: %s\n", i+1, issue.Key, issue.Fields.IssueType.Name, summary)
-		}
-		fmt.Print("> ")
-
-		choice2, err := reader.ReadString('\n')
-		if err != nil {
-			return "", fmt.Errorf("failed to read input: %w", err)
-		}
-		choice2 = strings.TrimSpace(choice2)
-		selected2, err := strconv.Atoi(choice2)
-		if err != nil {
-			return "", fmt.Errorf("invalid selection: %s", choice2)
-		}
-		if selected2 < 1 || selected2 > len(validIssues) {
-			return "", fmt.Errorf("invalid selection: %d", selected2)
-		}
-		selectedTicketKey = validIssues[selected2-1].Key
-	} else {
-		return "", fmt.Errorf("invalid selection: %d", selected)
 	}
-
-	if selectedTicketKey == "" {
-		return "", fmt.Errorf("no ticket selected")
-	}
-
-	return selectedTicketKey, nil
+	return validIssues
 }
 
 // reviewTicket handles the review workflow for a single ticket

@@ -41,104 +41,129 @@ func CheckDescriptionQuality(
 }
 
 // HandleComponentStep checks and assigns component if missing
-func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticket *jira.Issue, configDir string) (bool, error) {
-	// Check if ticket has components
+func HandleComponentStep(
+	client jira.JiraClient, reader *bufio.Reader, cfg *config.Config,
+	ticket *jira.Issue, configDir string,
+) (bool, error) {
 	if len(ticket.Fields.Components) > 0 {
-		return true, nil // Already has components
+		return true, nil
 	}
 
-	// Load state for recent components
 	statePath := config.GetStatePath(configDir)
 	state, err := config.LoadState(statePath)
 	if err != nil {
 		state = &config.State{}
 	}
 
-	// Fetch components for project
 	projectKey := cfg.DefaultProject
 	if projectKey == "" {
 		return false, fmt.Errorf("default_project not configured")
 	}
 
-	// Fetch components for project (with retry option if not found)
-	var components []jira.Component
-	var fetchErr error
-	for retries := 0; retries < 2; retries++ {
-		components, fetchErr = client.GetComponents(projectKey)
-		if fetchErr == nil {
-			break
-		}
-		if retries == 0 {
-			// First attempt failed, ask user if they want to retry with cache bypass
-			fmt.Printf("Failed to fetch components: %v\n", fetchErr)
-			fmt.Print("Retry without cache? [y/N]: ")
-			retryInput, err := reader.ReadString('\n')
-			if err != nil {
-				return false, err
-			}
-			retryInput = strings.TrimSpace(strings.ToLower(retryInput))
-			if retryInput != "y" && retryInput != "yes" {
-				return false, fetchErr
-			}
-			// Note: We can't bypass cache from here without modifying GetComponents
-			// For now, just retry - the cache might have been updated
-		}
-	}
-	if fetchErr != nil {
-		return false, fmt.Errorf("failed to fetch components: %w", fetchErr)
+	components, err := fetchComponentsWithRetry(client, reader, projectKey)
+	if err != nil {
+		return false, err
 	}
 
 	if len(components) == 0 {
-		// No components available, skip this step
 		return true, nil
 	}
 
-	// Show recent components first
-	recent := state.RecentComponents
-	if len(recent) > 0 {
-		fmt.Println("Recent components:")
-		for i, compName := range recent {
-			fmt.Printf("[%d] %s\n", i+1, compName)
-		}
-		fmt.Printf("[%d] Other...\n", len(recent)+1)
-		fmt.Print("> ")
-
-		choice, err := reader.ReadString('\n')
-		if err != nil {
-			return false, err
-		}
-		choice = strings.TrimSpace(choice)
-		selected, err := strconv.Atoi(choice)
-		if err != nil {
-			return false, fmt.Errorf("invalid selection: %s", choice)
-		}
-
-		if selected >= 1 && selected <= len(recent) {
-			// Find component by name from recent list
-			compName := recent[selected-1]
-			for _, comp := range components {
-				if comp.Name == compName {
-					// Update ticket
-					if err := client.UpdateTicketComponents(ticket.Key, []string{comp.ID}); err != nil {
-						return false, err
-					}
-					// Track selection
-					state.AddRecentComponent(compName)
-					if err := config.SaveState(state, statePath); err != nil {
-						_ = err // Log but don't fail
-					}
-					return true, nil
-				}
-			}
-		}
-		// User selected "Other..."
-		if selected != len(recent)+1 {
-			return false, fmt.Errorf("invalid selection")
-		}
-		// If selected == len(recent)+1, fall through to show all components below
+	selectedFromRecent, comp, err := selectFromRecentComponents(reader, components, state.RecentComponents)
+	if err != nil {
+		return false, err
+	}
+	if selectedFromRecent {
+		return updateComponentAndSave(client, ticket.Key, comp, state, statePath)
 	}
 
-	// Show all components
+	selected, err := selectFromComponentList(reader, components)
+	if err != nil {
+		return false, err
+	}
+
+	if selected == len(components)+2 {
+		return false, nil
+	}
+
+	if selected == len(components)+1 {
+		return handleComponentSearch(client, reader, ticket, projectKey, components, state, statePath)
+	}
+
+	if selected < 1 || selected > len(components) {
+		return false, fmt.Errorf("invalid selection: %d", selected)
+	}
+
+	return updateComponentAndSave(client, ticket.Key, components[selected-1], state, statePath)
+}
+
+func fetchComponentsWithRetry(
+	client jira.JiraClient, reader *bufio.Reader, projectKey string,
+) ([]jira.Component, error) {
+	components, err := client.GetComponents(projectKey)
+	if err == nil {
+		return components, nil
+	}
+
+	fmt.Printf("Failed to fetch components: %v\n", err)
+	fmt.Print("Retry without cache? [y/N]: ")
+	retryInput, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+	retryInput = strings.TrimSpace(strings.ToLower(retryInput))
+	if retryInput != "y" && retryInput != "yes" {
+		return nil, err
+	}
+
+	components, err = client.GetComponents(projectKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch components: %w", err)
+	}
+	return components, nil
+}
+
+func selectFromRecentComponents(
+	reader *bufio.Reader, components []jira.Component, recent []string,
+) (bool, jira.Component, error) {
+	if len(recent) == 0 {
+		return false, jira.Component{}, nil
+	}
+
+	fmt.Println("Recent components:")
+	for i, compName := range recent {
+		fmt.Printf("[%d] %s\n", i+1, compName)
+	}
+	fmt.Printf("[%d] Other...\n", len(recent)+1)
+	fmt.Print("> ")
+
+	choice, err := reader.ReadString('\n')
+	if err != nil {
+		return false, jira.Component{}, err
+	}
+	choice = strings.TrimSpace(choice)
+	selected, err := strconv.Atoi(choice)
+	if err != nil {
+		return false, jira.Component{}, fmt.Errorf("invalid selection: %s", choice)
+	}
+
+	if selected >= 1 && selected <= len(recent) {
+		compName := recent[selected-1]
+		for _, comp := range components {
+			if comp.Name == compName {
+				return true, comp, nil
+			}
+		}
+	}
+
+	if selected != len(recent)+1 {
+		return false, jira.Component{}, fmt.Errorf("invalid selection")
+	}
+
+	return false, jira.Component{}, nil
+}
+
+func selectFromComponentList(reader *bufio.Reader, components []jira.Component) (int, error) {
 	fmt.Println("Select component:")
 	for i, comp := range components {
 		fmt.Printf("[%d] %s\n", i+1, comp.Name)
@@ -149,186 +174,158 @@ func HandleComponentStep(client jira.JiraClient, reader *bufio.Reader, cfg *conf
 
 	choice, err := reader.ReadString('\n')
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	choice = strings.TrimSpace(choice)
 	selected, err := strconv.Atoi(choice)
 	if err != nil {
-		return false, fmt.Errorf("invalid selection: %s", choice)
+		return 0, fmt.Errorf("invalid selection: %s", choice)
+	}
+	return selected, nil
+}
+
+func handleComponentSearch(
+	client jira.JiraClient, reader *bufio.Reader, ticket *jira.Issue,
+	projectKey string, components []jira.Component, state *config.State, statePath string,
+) (bool, error) {
+	fmt.Print("Enter component name to search for (or exact name to create): ")
+	searchInput, err := reader.ReadString('\n')
+	if err != nil {
+		return false, err
+	}
+	searchInput = strings.TrimSpace(searchInput)
+	if searchInput == "" {
+		return false, fmt.Errorf("component name cannot be empty")
 	}
 
-	if selected == len(components)+2 {
-		// User skipped - return false to skip remaining steps
+	matchingComponents := findMatchingComponents(components, searchInput)
+	if len(matchingComponents) == 0 {
+		return handleComponentNotFound(client, reader, ticket, projectKey, searchInput, state, statePath)
+	}
+
+	if len(matchingComponents) == 1 {
+		return updateComponentAndSave(client, ticket.Key, matchingComponents[0], state, statePath)
+	}
+
+	return selectFromMatchingComponents(client, reader, ticket, matchingComponents, state, statePath)
+}
+
+func findMatchingComponents(components []jira.Component, searchInput string) []jira.Component {
+	var matches []jira.Component
+	searchLower := strings.ToLower(searchInput)
+	for _, comp := range components {
+		if strings.Contains(strings.ToLower(comp.Name), searchLower) {
+			matches = append(matches, comp)
+		}
+	}
+	return matches
+}
+
+func handleComponentNotFound(
+	client jira.JiraClient, _ *bufio.Reader, ticket *jira.Issue,
+	projectKey, searchInput string, state *config.State, statePath string,
+) (bool, error) {
+	exactMatch := findExactComponentMatch(client, projectKey, searchInput)
+	if exactMatch != nil {
+		return updateComponentAndSave(client, ticket.Key, *exactMatch, state, statePath)
+	}
+
+	fmt.Printf("\nComponent '%s' not found in the component list.\n", searchInput)
+	fmt.Println("This might be due to a stale cache. Attempting to refresh...")
+
+	client.ClearComponentCache(projectKey)
+	refreshedComponents, err := client.GetComponents(projectKey)
+	if err != nil {
+		return false, fmt.Errorf("failed to refresh components: %w", err)
+	}
+
+	refreshedMatch := findComponentInRefreshedList(refreshedComponents, searchInput)
+	if refreshedMatch != nil {
+		return updateComponentAndSave(client, ticket.Key, *refreshedMatch, state, statePath)
+	}
+
+	fmt.Println("Component still not found after refreshing the list.")
+	fmt.Println("Possible reasons:")
+	fmt.Println("  - Component might be archived or inactive")
+	fmt.Println("  - Component might be in a different project")
+	fmt.Println("  - Component name might be different in Jira")
+	fmt.Println("\nTip: Try running with --no-cache flag to ensure fresh data:")
+	fmt.Printf("  jira review %s --no-cache\n", ticket.Key)
+	return false, fmt.Errorf(
+		"component '%s' not found in project %s even after refreshing. "+
+			"Please verify the component name and ensure it exists in the project",
+		searchInput, projectKey)
+}
+
+func findExactComponentMatch(client jira.JiraClient, projectKey, searchInput string) *jira.Component {
+	components, err := client.GetComponents(projectKey)
+	if err != nil {
+		return nil
+	}
+	for i := range components {
+		if strings.EqualFold(components[i].Name, searchInput) {
+			return &components[i]
+		}
+	}
+	return nil
+}
+
+func findComponentInRefreshedList(refreshedComponents []jira.Component, searchInput string) *jira.Component {
+	searchLower := strings.ToLower(searchInput)
+	for i := range refreshedComponents {
+		if strings.EqualFold(refreshedComponents[i].Name, searchInput) {
+			return &refreshedComponents[i]
+		}
+		if strings.Contains(strings.ToLower(refreshedComponents[i].Name), searchLower) {
+			return &refreshedComponents[i]
+		}
+	}
+	return nil
+}
+
+func selectFromMatchingComponents(
+	client jira.JiraClient, reader *bufio.Reader, ticket *jira.Issue,
+	matchingComponents []jira.Component, state *config.State, statePath string,
+) (bool, error) {
+	fmt.Println("Found matching components:")
+	for i, comp := range matchingComponents {
+		fmt.Printf("[%d] %s\n", i+1, comp.Name)
+	}
+	fmt.Printf("[%d] Cancel\n", len(matchingComponents)+1)
+	fmt.Print("> ")
+
+	matchChoice, err := reader.ReadString('\n')
+	if err != nil {
+		return false, err
+	}
+	matchChoice = strings.TrimSpace(matchChoice)
+	matchSelected, err := strconv.Atoi(matchChoice)
+	if err != nil {
+		return false, fmt.Errorf("invalid selection: %s", matchChoice)
+	}
+
+	if matchSelected == len(matchingComponents)+1 {
 		return false, nil
 	}
 
-	if selected == len(components)+1 {
-		// User wants to search/enter component name
-		fmt.Print("Enter component name to search for (or exact name to create): ")
-		searchInput, err := reader.ReadString('\n')
-		if err != nil {
-			return false, err
-		}
-		searchInput = strings.TrimSpace(searchInput)
-		if searchInput == "" {
-			return false, fmt.Errorf("component name cannot be empty")
-		}
-
-		// Search for component by name (case-insensitive partial match)
-		var matchingComponents []jira.Component
-		searchLower := strings.ToLower(searchInput)
-		for _, comp := range components {
-			if strings.Contains(strings.ToLower(comp.Name), searchLower) {
-				matchingComponents = append(matchingComponents, comp)
-			}
-		}
-
-		if len(matchingComponents) == 0 {
-			// No matches found - try case-insensitive exact match
-			var exactMatch *jira.Component
-			for i := range components {
-				if strings.EqualFold(components[i].Name, searchInput) {
-					exactMatch = &components[i]
-					break
-				}
-			}
-
-			if exactMatch != nil {
-				// Found exact match (case-insensitive), use it
-				if err := client.UpdateTicketComponents(ticket.Key, []string{exactMatch.ID}); err != nil {
-					return false, fmt.Errorf("failed to update component: %w", err)
-				}
-				state.AddRecentComponent(exactMatch.Name)
-				if err := config.SaveState(state, statePath); err != nil {
-					_ = err // Log but don't fail
-				}
-				fmt.Printf("Component set to: %s\n", exactMatch.Name)
-				return true, nil
-			}
-
-			// Still no match - component might not be in the fetched list
-			// Try clearing cache and re-fetching
-			fmt.Printf("\nComponent '%s' not found in the component list.\n", searchInput)
-			fmt.Println("This might be due to a stale cache. Attempting to refresh...")
-
-			// Clear component cache for this project
-			client.ClearComponentCache(projectKey)
-
-			// Re-fetch components
-			refreshedComponents, err := client.GetComponents(projectKey)
-			if err != nil {
-				return false, fmt.Errorf("failed to refresh components: %w", err)
-			}
-
-			// Try searching again in refreshed list
-			var refreshedMatch *jira.Component
-			searchLower := strings.ToLower(searchInput)
-			for i := range refreshedComponents {
-				if strings.EqualFold(refreshedComponents[i].Name, searchInput) {
-					refreshedMatch = &refreshedComponents[i]
-					break
-				} else if strings.Contains(strings.ToLower(refreshedComponents[i].Name), searchLower) {
-					// Also check for partial match
-					if refreshedMatch == nil {
-						refreshedMatch = &refreshedComponents[i]
-					}
-				}
-			}
-
-			if refreshedMatch != nil {
-				// Found it after refresh!
-				if err := client.UpdateTicketComponents(ticket.Key, []string{refreshedMatch.ID}); err != nil {
-					return false, fmt.Errorf("failed to update component: %w", err)
-				}
-				state.AddRecentComponent(refreshedMatch.Name)
-				if err := config.SaveState(state, statePath); err != nil {
-					_ = err // Log but don't fail
-				}
-				fmt.Printf("Component found and set to: %s\n", refreshedMatch.Name)
-				return true, nil
-			}
-
-			// Still not found after refresh
-			fmt.Println("Component still not found after refreshing the list.")
-			fmt.Println("Possible reasons:")
-			fmt.Println("  - Component might be archived or inactive")
-			fmt.Println("  - Component might be in a different project")
-			fmt.Println("  - Component name might be different in Jira")
-			fmt.Println("\nTip: Try running with --no-cache flag to ensure fresh data:")
-			fmt.Printf("  jira review %s --no-cache\n", ticket.Key)
-			return false, fmt.Errorf(
-				"component '%s' not found in project %s even after refreshing. "+
-					"Please verify the component name and ensure it exists in the project",
-				searchInput, projectKey)
-		}
-
-		// Show matching components
-		if len(matchingComponents) == 1 {
-			// Only one match, use it
-			if err := client.UpdateTicketComponents(ticket.Key, []string{matchingComponents[0].ID}); err != nil {
-				return false, fmt.Errorf("failed to update component: %w", err)
-			}
-			state.AddRecentComponent(matchingComponents[0].Name)
-			if err := config.SaveState(state, statePath); err != nil {
-				_ = err // Log but don't fail
-			}
-			return true, nil
-		}
-
-		// Multiple matches, show them
-		fmt.Println("Found matching components:")
-		for i, comp := range matchingComponents {
-			fmt.Printf("[%d] %s\n", i+1, comp.Name)
-		}
-		fmt.Printf("[%d] Cancel\n", len(matchingComponents)+1)
-		fmt.Print("> ")
-
-		matchChoice, err := reader.ReadString('\n')
-		if err != nil {
-			return false, err
-		}
-		matchChoice = strings.TrimSpace(matchChoice)
-		matchSelected, err := strconv.Atoi(matchChoice)
-		if err != nil {
-			return false, fmt.Errorf("invalid selection: %s", matchChoice)
-		}
-
-		if matchSelected == len(matchingComponents)+1 {
-			return false, nil // User canceled
-		}
-
-		if matchSelected < 1 || matchSelected > len(matchingComponents) {
-			return false, fmt.Errorf("invalid selection: %d", matchSelected)
-		}
-
-		selectedComp := matchingComponents[matchSelected-1]
-		if err := client.UpdateTicketComponents(ticket.Key, []string{selectedComp.ID}); err != nil {
-			return false, fmt.Errorf("failed to update component: %w", err)
-		}
-		state.AddRecentComponent(selectedComp.Name)
-		if err := config.SaveState(state, statePath); err != nil {
-			_ = err // Log but don't fail
-		}
-		return true, nil
+	if matchSelected < 1 || matchSelected > len(matchingComponents) {
+		return false, fmt.Errorf("invalid selection: %d", matchSelected)
 	}
 
-	if selected < 1 || selected > len(components) {
-		return false, fmt.Errorf("invalid selection: %d", selected)
-	}
+	return updateComponentAndSave(client, ticket.Key, matchingComponents[matchSelected-1], state, statePath)
+}
 
-	selectedComp := components[selected-1]
-
-	// Update ticket
-	if err := client.UpdateTicketComponents(ticket.Key, []string{selectedComp.ID}); err != nil {
+func updateComponentAndSave(
+	client jira.JiraClient, ticketKey string, comp jira.Component,
+	state *config.State, statePath string,
+) (bool, error) {
+	if err := client.UpdateTicketComponents(ticketKey, []string{comp.ID}); err != nil {
 		return false, err
 	}
-
-	// Track selection
-	state.AddRecentComponent(selectedComp.Name)
+	state.AddRecentComponent(comp.Name)
 	if err := config.SaveState(state, statePath); err != nil {
-		_ = err // Log but don't fail
+		_ = err // Ignore - state saving is optional
 	}
-
 	return true, nil
 }
 
@@ -380,68 +377,98 @@ func HandlePriorityStep(client jira.JiraClient, reader *bufio.Reader, ticket *ji
 }
 
 // HandleSeverityStep checks and assigns severity if configured and missing
-func HandleSeverityStep(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticket *jira.Issue) (bool, error) {
-	// Check if severity field is configured
+func HandleSeverityStep(
+	client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticket *jira.Issue,
+) (bool, error) {
 	if cfg.SeverityFieldID == "" {
-		return true, nil // Not configured, skip step
+		return true, nil
 	}
 
-	// Check if severity is already set by fetching raw ticket data
-	rawTicket, err := client.GetTicketRaw(ticket.Key)
-	if err == nil {
-		if fields, ok := rawTicket["fields"].(map[string]interface{}); ok {
-			if severityValue, ok := fields[cfg.SeverityFieldID]; ok && severityValue != nil {
-				// Check if it's a value object (map) or direct string
-				var currentValue string
-				switch v := severityValue.(type) {
-				case map[string]interface{}:
-					if val, ok := v["value"].(string); ok {
-						currentValue = val
-					} else if val, ok := v["name"].(string); ok {
-						currentValue = val
-					}
-				case string:
-					currentValue = v
-				}
-				if currentValue != "" {
-					// Severity is already set, skip step
-					return true, nil
-				}
-			}
-		}
+	if isSeverityAlreadySet(client, ticket.Key, cfg.SeverityFieldID) {
+		return true, nil
 	}
 
-	// Fetch severity values from Jira API
-	values, err := client.GetSeverityFieldValues(cfg.SeverityFieldID)
+	values, err := getSeverityValues(client, cfg)
 	if err != nil {
-		return false, fmt.Errorf("failed to fetch severity values: %w", err)
-	}
-
-	// If API doesn't return values, use configured values from config.yaml
-	if len(values) == 0 && len(cfg.SeverityValues) > 0 {
-		values = cfg.SeverityValues
+		return false, err
 	}
 
 	if len(values) == 0 {
-		// No predefined values available - severity field may not have a fixed set of values
-		// Still show the step but inform user that severity field is configured but has no predefined values
-		fmt.Println("Severity field is configured but has no predefined values.")
-		fmt.Print("Set severity? [y/N] ")
-		response, err := reader.ReadString('\n')
-		if err != nil {
-			return false, err
-		}
-		response = strings.TrimSpace(strings.ToLower(response))
-		if response != "y" && response != "yes" {
-			return false, nil // User skipped
-		}
-		// TODO: Implement UpdateTicketSeverity to set custom severity value
-		// For now, inform user that this feature is not yet implemented
-		fmt.Println("Note: Setting custom severity values is not yet implemented.")
-		fmt.Println("You may need to set the severity manually in Jira.")
-		return false, nil // Mark as incomplete since we can't actually set it
+		return handleSeverityWithoutValues(reader)
 	}
 
+	return selectAndSetSeverity(client, reader, ticket.Key, cfg.SeverityFieldID, values)
+}
+
+func isSeverityAlreadySet(client jira.JiraClient, ticketKey, severityFieldID string) bool {
+	rawTicket, err := client.GetTicketRaw(ticketKey)
+	if err != nil {
+		return false
+	}
+
+	fields, ok := rawTicket["fields"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+
+	severityValue, ok := fields[severityFieldID]
+	if !ok || severityValue == nil {
+		return false
+	}
+
+	currentValue := extractSeverityValue(severityValue)
+	return currentValue != ""
+}
+
+func extractSeverityValue(severityValue interface{}) string {
+	switch v := severityValue.(type) {
+	case map[string]interface{}:
+		if val, ok := v["value"].(string); ok {
+			return val
+		}
+		if val, ok := v["name"].(string); ok {
+			return val
+		}
+	case string:
+		return v
+	}
+	return ""
+}
+
+func getSeverityValues(client jira.JiraClient, cfg *config.Config) ([]string, error) {
+	values, err := client.GetSeverityFieldValues(cfg.SeverityFieldID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch severity values: %w", err)
+	}
+
+	if len(values) == 0 && len(cfg.SeverityValues) > 0 {
+		return cfg.SeverityValues, nil
+	}
+
+	return values, nil
+}
+
+func handleSeverityWithoutValues(reader *bufio.Reader) (bool, error) {
+	fmt.Println("Severity field is configured but has no predefined values.")
+	fmt.Print("Set severity? [y/N] ")
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return false, err
+	}
+	response = strings.TrimSpace(strings.ToLower(response))
+	if response != "y" && response != "yes" {
+		return false, nil
+	}
+
+	fmt.Println("Note: Setting custom severity values is not yet implemented.")
+	fmt.Println("You may need to set the severity manually in Jira.")
+	return false, nil
+}
+
+func selectAndSetSeverity(
+	client jira.JiraClient, reader *bufio.Reader,
+	ticketKey, severityFieldID string, values []string,
+) (bool, error) {
 	fmt.Println("Select severity:")
 	for i, v := range values {
 		fmt.Printf("[%d] %s\n", i+1, v)
@@ -460,16 +487,15 @@ func HandleSeverityStep(client jira.JiraClient, reader *bufio.Reader, cfg *confi
 	}
 
 	if selected == len(values)+1 {
-		return false, nil // Skip
+		return false, nil
 	}
 
 	if selected < 1 || selected > len(values) {
 		return false, fmt.Errorf("invalid selection: %d", selected)
 	}
 
-	// Update ticket severity
 	selectedValue := values[selected-1]
-	if err := client.UpdateTicketSeverity(ticket.Key, cfg.SeverityFieldID, selectedValue); err != nil {
+	if err := client.UpdateTicketSeverity(ticketKey, severityFieldID, selectedValue); err != nil {
 		return false, fmt.Errorf("failed to update severity: %w", err)
 	}
 

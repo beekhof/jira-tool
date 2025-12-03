@@ -32,74 +32,23 @@ or review a queue of tickets based on filters.`,
 	RunE: runReview,
 }
 
-func runReview(cmd *cobra.Command, args []string) error {
+func runReview(_ *cobra.Command, args []string) error {
 	configDir := GetConfigDir()
 	client, err := jira.NewClient(configDir, GetNoCache())
 	if err != nil {
 		return err
 	}
 
-	// Load config
 	configPath := config.GetConfigPath(configDir)
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	var issues []jira.Issue
-
-	// Get ticket filter
 	filter := GetTicketFilter(cfg)
-
-	// If a specific ticket ID is provided, fetch just that one
-	if len(args) == 1 {
-		ticketID := normalizeTicketID(args[0], cfg.DefaultProject)
-		jql := fmt.Sprintf("key = %s", ticketID)
-		jql = jira.ApplyTicketFilter(jql, filter)
-		issues, err = client.SearchTickets(jql)
-		if err != nil {
-			return err
-		}
-		if len(issues) == 0 {
-			return fmt.Errorf("ticket %s not found", ticketID)
-		}
-	} else {
-		// Build JQL query based on flags
-		var jqlParts []string
-		project := cfg.DefaultProject
-		if project != "" {
-			jqlParts = append(jqlParts, fmt.Sprintf("project = %s", project))
-		}
-
-		if needsDetailFlag {
-			jqlParts = append(jqlParts, "status = \"To Do\"")
-		}
-		if unassignedFlag {
-			jqlParts = append(jqlParts, "assignee is EMPTY")
-		}
-		if untriagedFlag {
-			jqlParts = append(jqlParts, "priority is EMPTY")
-		}
-
-		// If no flags, combine all conditions with OR
-		if !needsDetailFlag && !unassignedFlag && !untriagedFlag {
-			jqlParts = append(jqlParts, "(status = \"To Do\" OR assignee is EMPTY OR priority is EMPTY)")
-		}
-
-		jql := strings.Join(jqlParts, " AND ")
-		if len(jqlParts) > 1 && (!needsDetailFlag && !unassignedFlag && !untriagedFlag) {
-			// For default case, use OR for the conditions
-			projectPart := jqlParts[0]
-			conditions := strings.Join(jqlParts[1:], " OR ")
-			jql = fmt.Sprintf("%s AND (%s)", projectPart, conditions)
-		}
-
-		// Apply filter
-		jql = jira.ApplyTicketFilter(jql, filter)
-		issues, err = client.SearchTickets(jql)
-		if err != nil {
-			return err
-		}
+	issues, err := fetchReviewTickets(client, cfg, args, filter)
+	if err != nil {
+		return err
 	}
 
 	if len(issues) == 0 {
@@ -108,28 +57,142 @@ func runReview(cmd *cobra.Command, args []string) error {
 	}
 
 	reader := bufio.NewReader(os.Stdin)
-	configDir = GetConfigDir()
-
-	// If only one ticket, automatically run guided workflow
 	if len(issues) == 1 {
-		selectedIssue := issues[0]
-
-		// Initialize Gemini client
-		var geminiClient gemini.GeminiClient
-		geminiClient, err = gemini.NewClient(configDir)
-		if err != nil {
-			fmt.Printf("Warning: Could not initialize Gemini client: %v\n", err)
-			fmt.Println("Continuing without AI features...")
-			geminiClient = nil
-		}
-
-		if err := review.ProcessTicketWorkflow(client, geminiClient, reader, cfg, &selectedIssue, configDir); err != nil {
-			return fmt.Errorf("workflow error: %w", err)
-		}
-		return nil
+		return handleSingleTicketReview(client, reader, cfg, &issues[0], configDir)
 	}
 
-	// Determine page size: command flag > config > default
+	return handleMultipleTicketsReview(client, reader, cfg, issues, configDir)
+}
+
+func fetchReviewTickets(
+	client jira.JiraClient, cfg *config.Config, args []string, filter string,
+) ([]jira.Issue, error) {
+	if len(args) == 1 {
+		return fetchSingleTicket(client, cfg, args[0], filter)
+	}
+	return fetchTicketsByFlags(client, cfg, filter)
+}
+
+func fetchSingleTicket(client jira.JiraClient, cfg *config.Config, ticketArg, filter string) ([]jira.Issue, error) {
+	ticketID := normalizeTicketID(ticketArg, cfg.DefaultProject)
+	jql := fmt.Sprintf("key = %s", ticketID)
+	jql = jira.ApplyTicketFilter(jql, filter)
+	issues, err := client.SearchTickets(jql)
+	if err != nil {
+		return nil, err
+	}
+	if len(issues) == 0 {
+		return nil, fmt.Errorf("ticket %s not found", ticketID)
+	}
+	return issues, nil
+}
+
+func fetchTicketsByFlags(client jira.JiraClient, cfg *config.Config, filter string) ([]jira.Issue, error) {
+	jql := buildReviewJQL(cfg)
+	jql = jira.ApplyTicketFilter(jql, filter)
+	return client.SearchTickets(jql)
+}
+
+func buildReviewJQL(cfg *config.Config) string {
+	var jqlParts []string
+	project := cfg.DefaultProject
+	if project != "" {
+		jqlParts = append(jqlParts, fmt.Sprintf("project = %s", project))
+	}
+
+	if needsDetailFlag {
+		jqlParts = append(jqlParts, "status = \"To Do\"")
+	}
+	if unassignedFlag {
+		jqlParts = append(jqlParts, "assignee is EMPTY")
+	}
+	if untriagedFlag {
+		jqlParts = append(jqlParts, "priority is EMPTY")
+	}
+
+	if !needsDetailFlag && !unassignedFlag && !untriagedFlag {
+		jqlParts = append(jqlParts, "(status = \"To Do\" OR assignee is EMPTY OR priority is EMPTY)")
+	}
+
+	if len(jqlParts) == 0 {
+		return ""
+	}
+
+	if len(jqlParts) > 1 && (!needsDetailFlag && !unassignedFlag && !untriagedFlag) {
+		projectPart := jqlParts[0]
+		conditions := strings.Join(jqlParts[1:], " OR ")
+		return fmt.Sprintf("%s AND (%s)", projectPart, conditions)
+	}
+
+	return strings.Join(jqlParts, " AND ")
+}
+
+func handleSingleTicketReview(
+	client jira.JiraClient, reader *bufio.Reader, cfg *config.Config,
+	issue *jira.Issue, configDir string,
+) error {
+	geminiClient, err := gemini.NewClient(configDir)
+	if err != nil {
+		fmt.Printf("Warning: Could not initialize Gemini client: %v\n", err)
+		fmt.Println("Continuing without AI features...")
+		geminiClient = nil
+	}
+
+	if err := review.ProcessTicketWorkflow(client, geminiClient, reader, cfg, issue, configDir); err != nil {
+		return fmt.Errorf("workflow error: %w", err)
+	}
+	return nil
+}
+
+func handleMultipleTicketsReview(
+	client jira.JiraClient, reader *bufio.Reader, cfg *config.Config,
+	issues []jira.Issue, configDir string,
+) error {
+	pageSize := calculatePageSize(cfg)
+	geminiClient := initializeGeminiClient(configDir)
+	selected := make(map[string]bool)
+	actedOn := make(map[string]bool)
+	currentPage := 0
+	totalPages := (len(issues) + pageSize - 1) / pageSize
+
+	for {
+		start := currentPage * pageSize
+		end := start + pageSize
+		if end > len(issues) {
+			end = len(issues)
+		}
+		pageIssues := issues[start:end]
+
+		displayReviewPage(pageIssues, start, currentPage+1, totalPages, len(issues), selected, actedOn)
+
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read input: %w", err)
+		}
+		input = strings.TrimSpace(strings.ToLower(input))
+
+		action, newPage, shouldQuit, shouldReview := processReviewInput(
+			input, currentPage, totalPages, len(pageIssues), len(issues), selected, pageIssues)
+		if shouldQuit {
+			return nil
+		}
+		if shouldReview {
+			if geminiClient == nil {
+				geminiClient = initializeGeminiClient(configDir)
+			}
+			return reviewSelectedTickets(client, geminiClient, reader, cfg, issues, selected, actedOn, configDir)
+		}
+		if action == "toggle" {
+			ticketNum, err := strconv.Atoi(input)
+			if err == nil {
+				toggleTicketSelection(selected, &issues[ticketNum-1])
+			}
+		}
+		currentPage = newPage
+	}
+}
+
+func calculatePageSize(cfg *config.Config) int {
 	pageSize := pageSizeFlag
 	if pageSize <= 0 {
 		pageSize = cfg.ReviewPageSize
@@ -137,191 +200,139 @@ func runReview(cmd *cobra.Command, args []string) error {
 			pageSize = 10
 		}
 	}
-
-	// If no-paging flag is set, set page size to total number of issues
 	if noPagingFlag {
-		pageSize = len(issues)
+		pageSize = 10000 // Large number to show all
 	}
+	return pageSize
+}
 
-	// Initialize Gemini client
-	var geminiClient gemini.GeminiClient
-	geminiClient, err = gemini.NewClient(configDir)
+func initializeGeminiClient(configDir string) gemini.GeminiClient {
+	geminiClient, err := gemini.NewClient(configDir)
 	if err != nil {
 		fmt.Printf("Warning: Could not initialize Gemini client: %v\n", err)
 		fmt.Println("Continuing without AI features...")
-		geminiClient = nil
+		return nil
+	}
+	return geminiClient
+}
+
+func displayReviewPage(
+	pageIssues []jira.Issue, start, currentPage, totalPages, totalIssues int,
+	selected, actedOn map[string]bool,
+) {
+	selectedCount := countSelected(selected)
+	fmt.Printf("\n=== Page %d of %d (%d tickets, %d selected) ===\n\n",
+		currentPage, totalPages, totalIssues, selectedCount)
+
+	fmt.Printf("%-4s %-12s %-10s %-50s %-12s %-20s %-8s\n",
+		"#", "Key", "Type", "Summary", "Priority", "Assignee", "Status")
+	fmt.Println(strings.Repeat("-", 120))
+
+	for i := range pageIssues {
+		issue := &pageIssues[i]
+		idx := start + i + 1
+		priority := getPriorityName(issue)
+		assignee := getAssigneeName(issue)
+		issueType := issue.Fields.IssueType.Name
+		summary := truncateSummary(issue.Fields.Summary, 48)
+		marker := getTicketMarker(issue.Key, selected, actedOn)
+
+		fmt.Printf("%-4d %-12s %-10s %-50s %-12s %-20s %-8s %s\n",
+			idx, issue.Key, issueType, summary, priority, assignee, issue.Fields.Status.Name, marker)
 	}
 
-	// Track selected tickets
-	selected := make(map[string]bool)
-	// Track acted-on tickets
-	actedOn := make(map[string]bool)
+	fmt.Println()
+	fmt.Printf("Actions: [1-%d] toggle ticket | [m]ark all | [u]nmark all | "+
+		"[r]eview selected | [n]ext | [p]rev | [q]uit\n", len(pageIssues))
+	fmt.Print("> ")
+}
 
-	// Current page index
-	currentPage := 0
-	totalPages := (len(issues) + pageSize - 1) / pageSize
-
-	for {
-		// Calculate page boundaries
-		start := currentPage * pageSize
-		end := start + pageSize
-		if end > len(issues) {
-			end = len(issues)
+func countSelected(selected map[string]bool) int {
+	count := 0
+	for _, v := range selected {
+		if v {
+			count++
 		}
+	}
+	return count
+}
 
-		pageIssues := issues[start:end]
+func truncateSummary(summary string, maxLen int) string {
+	if len(summary) > maxLen {
+		return summary[:maxLen-3] + "..."
+	}
+	return summary
+}
 
-		// Count selected tickets
-		selectedCount := 0
-		for _, v := range selected {
-			if v {
-				selectedCount++
-			}
+func getTicketMarker(key string, selected, actedOn map[string]bool) string {
+	if selected[key] {
+		return "✓ "
+	}
+	if actedOn[key] {
+		return "• "
+	}
+	return ""
+}
+
+func processReviewInput(
+	input string, currentPage, totalPages, _, totalIssues int,
+	selected map[string]bool, pageIssues []jira.Issue,
+) (action string, newPage int, shouldQuit, shouldReview bool) {
+	switch input {
+	case "n", "next":
+		if currentPage < totalPages-1 {
+			return "", currentPage + 1, false, false
 		}
-
-		// Display page header
-		fmt.Printf("\n=== Page %d of %d (%d tickets, %d selected) ===\n\n",
-			currentPage+1, totalPages, len(issues), selectedCount)
-
-		// Display tickets in a table format
-		fmt.Printf("%-4s %-12s %-10s %-50s %-12s %-20s %-8s\n",
-			"#", "Key", "Type", "Summary", "Priority", "Assignee", "Status")
-		fmt.Println(strings.Repeat("-", 120))
-
+		fmt.Println("Already on last page.")
+		return "", currentPage, false, false
+	case "p", "prev":
+		if currentPage > 0 {
+			return "", currentPage - 1, false, false
+		}
+		fmt.Println("Already on first page.")
+		return "", currentPage, false, false
+	case "q", "quit":
+		return "", currentPage, true, false
+	case "m", "mark all":
 		for i := range pageIssues {
-			issue := &pageIssues[i]
-			idx := start + i + 1
-
-			// Get priority and assignee
-			priority := "None"
-			if issue.Fields.Priority.Name != "" {
-				priority = issue.Fields.Priority.Name
-			}
-
-			assignee := "Unassigned"
-			if issue.Fields.Assignee.DisplayName != "" {
-				assignee = issue.Fields.Assignee.DisplayName
-			}
-
-			// Get issue type
-			issueType := issue.Fields.IssueType.Name
-
-			// Truncate summary if too long
-			summary := issue.Fields.Summary
-			if len(summary) > 48 {
-				summary = summary[:45] + "..."
-			}
-
-			// Mark if selected or acted on
-			marker := ""
-			if selected[issue.Key] {
-				marker = "✓ "
-			} else if actedOn[issue.Key] {
-				marker = "• "
-			}
-
-			fmt.Printf("%-4d %-12s %-10s %-50s %-12s %-20s %-8s %s\n",
-				idx, issue.Key, issueType, summary, priority, assignee, issue.Fields.Status.Name, marker)
+			selected[pageIssues[i].Key] = true
 		}
-
-		fmt.Println()
-		fmt.Printf("Actions: [1-%d] toggle ticket | [m]ark all | [u]nmark all | "+
-			"[r]eview selected | [n]ext | [p]rev | [q]uit\n", len(pageIssues))
-		fmt.Print("> ")
-
-		// Read user input
-		input, err := reader.ReadString('\n')
-		if err != nil {
-			return fmt.Errorf("failed to read input: %w", err)
+		fmt.Printf("Marked %d tickets on this page.\n", len(pageIssues))
+		return "", currentPage, false, false
+	case "u", "unmark all":
+		for i := range pageIssues {
+			selected[pageIssues[i].Key] = false
 		}
-		input = strings.TrimSpace(strings.ToLower(input))
-
-		// Handle navigation
-		if input == "n" || input == "next" {
-			if currentPage < totalPages-1 {
-				currentPage++
-			} else {
-				fmt.Println("Already on last page.")
-			}
-			continue
+		fmt.Printf("Unmarked %d tickets on this page.\n", len(pageIssues))
+		return "", currentPage, false, false
+	case "r", "review":
+		if countSelected(selected) == 0 {
+			fmt.Println("No tickets selected. Select tickets first.")
+			return "", currentPage, false, false
 		}
+		return "", currentPage, false, true
+	}
 
-		if input == "p" || input == "prev" {
-			if currentPage > 0 {
-				currentPage--
-			} else {
-				fmt.Println("Already on first page.")
-			}
-			continue
-		}
+	ticketNum, err := strconv.Atoi(input)
+	if err != nil {
+		fmt.Println("Invalid input. Please enter a ticket number, action, or 'q' to quit.")
+		return "", currentPage, false, false
+	}
 
-		if input == "q" || input == "quit" {
-			return nil
-		}
+	if ticketNum < 1 || ticketNum > totalIssues {
+		fmt.Printf("Invalid ticket number. Please enter a number between 1 and %d.\n", totalIssues)
+		return "", currentPage, false, false
+	}
 
-		if input == "m" || input == "mark all" {
-			// Mark all tickets on current page
-			for i := range pageIssues {
-				selected[pageIssues[i].Key] = true
-			}
-			fmt.Printf("Marked %d tickets on this page.\n", len(pageIssues))
-			continue
-		}
+	return "toggle", currentPage, false, false
+}
 
-		if input == "u" || input == "unmark all" {
-			// Unmark all tickets on current page
-			for i := range pageIssues {
-				selected[pageIssues[i].Key] = false
-			}
-			fmt.Printf("Unmarked %d tickets on this page.\n", len(pageIssues))
-			continue
-		}
-
-		if input == "r" || input == "review" {
-			// Count selected tickets
-			selectedCount := 0
-			for _, v := range selected {
-				if v {
-					selectedCount++
-				}
-			}
-			if selectedCount == 0 {
-				fmt.Println("No tickets selected. Select tickets first.")
-				continue
-			}
-			// Initialize Gemini client if not already done
-			if geminiClient == nil {
-				geminiClient, err = gemini.NewClient(configDir)
-				if err != nil {
-					fmt.Printf("Warning: Could not initialize Gemini client: %v\n", err)
-					fmt.Println("Continuing without AI features...")
-					geminiClient = nil
-				}
-			}
-			return reviewSelectedTickets(client, geminiClient, reader, cfg, issues, selected, actedOn, configDir)
-		}
-
-		// Try to parse as ticket number
-		ticketNum, err := strconv.Atoi(input)
-		if err != nil {
-			fmt.Println("Invalid input. Please enter a ticket number, action, or 'q' to quit.")
-			continue
-		}
-
-		// Validate ticket number
-		if ticketNum < 1 || ticketNum > len(issues) {
-			fmt.Printf("Invalid ticket number. Please enter a number between 1 and %d.\n", len(issues))
-			continue
-		}
-
-		// Toggle selection
-		selectedIssue := issues[ticketNum-1]
-		selected[selectedIssue.Key] = !selected[selectedIssue.Key]
-		if selected[selectedIssue.Key] {
-			fmt.Printf("Selected %s\n", selectedIssue.Key)
-		} else {
-			fmt.Printf("Deselected %s\n", selectedIssue.Key)
-		}
+func toggleTicketSelection(selected map[string]bool, issue *jira.Issue) {
+	selected[issue.Key] = !selected[issue.Key]
+	if selected[issue.Key] {
+		fmt.Printf("Selected %s\n", issue.Key)
+	} else {
+		fmt.Printf("Deselected %s\n", issue.Key)
 	}
 }
 
@@ -392,75 +403,94 @@ func getAssigneeName(issue *jira.Issue) string {
 	return "Unassigned"
 }
 
-func handleAssign(client jira.JiraClient, reader *bufio.Reader, cfg *config.Config, ticketID string, configPath string) error {
-	// Load state for recent selections
+func handleAssign(client jira.JiraClient, reader *bufio.Reader, _ *config.Config, ticketID, _ string) error {
 	configDir := GetConfigDir()
 	statePath := config.GetStatePath(configDir)
 	state, err := config.LoadState(statePath)
 	if err != nil {
-		// If state can't be loaded, continue without recent list
 		state = &config.State{}
 	}
 
-	// Show recent assignees list
-	recent := state.RecentAssignees
-	if len(recent) > 0 {
-		fmt.Println("Recent assignees:")
-		for i, userID := range recent {
-			fmt.Printf("[%d] %s\n", i+1, userID)
-		}
-		fmt.Printf("[%d] Other...\n", len(recent)+1)
-		fmt.Print("> ")
+	selectedUser, userIdentifier, err := selectUserForAssignmentInReview(client, reader, state.RecentAssignees)
+	if err != nil {
+		return err
+	}
 
-		choice, err := reader.ReadString('\n')
-		if err != nil {
-			return err
-		}
-		choice = strings.TrimSpace(choice)
-		selected, err := strconv.Atoi(choice)
-		if err != nil {
-			return fmt.Errorf("invalid selection: %s", choice)
-		}
-
-		if selected >= 1 && selected <= len(recent) {
-			// Use the recent user identifier
-			userID := recent[selected-1]
-			// Search for the user
-			users, err := client.SearchUsers(userID)
-			if err != nil {
-				return err
-			}
-			if len(users) == 0 {
-				return fmt.Errorf("user not found: %s", userID)
-			}
-			// Track this selection (move to end of recent list)
-			state.AddRecentAssignee(userID)
-			if err := config.SaveState(state, statePath); err != nil {
-				// Log but don't fail - tracking is optional
-				_ = err
-			}
-			return client.AssignTicket(ticketID, users[0].AccountID, users[0].Name)
+	if userIdentifier != "" {
+		state.AddRecentAssignee(userIdentifier)
+		if err := config.SaveState(state, statePath); err != nil {
+			_ = err // Ignore - state saving is optional
 		}
 	}
 
-	// Search for user
+	return client.AssignTicket(ticketID, selectedUser.AccountID, selectedUser.Name)
+}
+
+func selectUserForAssignmentInReview(
+	client jira.JiraClient, reader *bufio.Reader, recent []string,
+) (jira.User, string, error) {
+	if len(recent) > 0 {
+		user, identifier, err := selectUserFromRecentInReview(client, reader, recent)
+		if err == nil && user.AccountID != "" {
+			return user, identifier, nil
+		}
+	}
+
+	return selectUserFromSearchInReview(client, reader)
+}
+
+func selectUserFromRecentInReview(
+	client jira.JiraClient, reader *bufio.Reader, recent []string,
+) (jira.User, string, error) {
+	fmt.Println("Recent assignees:")
+	for i, userID := range recent {
+		fmt.Printf("[%d] %s\n", i+1, userID)
+	}
+	fmt.Printf("[%d] Other...\n", len(recent)+1)
+	fmt.Print("> ")
+
+	choice, err := reader.ReadString('\n')
+	if err != nil {
+		return jira.User{}, "", err
+	}
+	choice = strings.TrimSpace(choice)
+	selected, err := strconv.Atoi(choice)
+	if err != nil {
+		return jira.User{}, "", fmt.Errorf("invalid selection: %s", choice)
+	}
+
+	if selected >= 1 && selected <= len(recent) {
+		userID := recent[selected-1]
+		users, err := client.SearchUsers(userID)
+		if err != nil {
+			return jira.User{}, "", err
+		}
+		if len(users) == 0 {
+			return jira.User{}, "", fmt.Errorf("user not found: %s", userID)
+		}
+		return users[0], userID, nil
+	}
+
+	return jira.User{}, "", nil
+}
+
+func selectUserFromSearchInReview(client jira.JiraClient, reader *bufio.Reader) (jira.User, string, error) {
 	fmt.Print("Search for user: ")
 	query, err := reader.ReadString('\n')
 	if err != nil {
-		return err
+		return jira.User{}, "", err
 	}
 	query = strings.TrimSpace(query)
 
 	users, err := client.SearchUsers(query)
 	if err != nil {
-		return fmt.Errorf("failed to search for users: %w", err)
+		return jira.User{}, "", fmt.Errorf("failed to search for users: %w", err)
 	}
 
 	if len(users) == 0 {
-		return fmt.Errorf("no users found matching: %s", query)
+		return jira.User{}, "", fmt.Errorf("no users found matching: %s", query)
 	}
 
-	// Show results
 	fmt.Println("Found users:")
 	for i, user := range users {
 		fmt.Printf("[%d] %s (%s) [AccountID: %s]\n", i+1, user.DisplayName, user.Name, user.AccountID)
@@ -469,34 +499,25 @@ func handleAssign(client jira.JiraClient, reader *bufio.Reader, cfg *config.Conf
 
 	choice, err := reader.ReadString('\n')
 	if err != nil {
-		return err
+		return jira.User{}, "", err
 	}
 	choice = strings.TrimSpace(choice)
 	selected, err := strconv.Atoi(choice)
 	if err != nil {
-		return fmt.Errorf("invalid selection: %s", choice)
+		return jira.User{}, "", fmt.Errorf("invalid selection: %s", choice)
 	}
 
 	if selected < 1 || selected > len(users) {
-		return fmt.Errorf("invalid selection: %d", selected)
+		return jira.User{}, "", fmt.Errorf("invalid selection: %d", selected)
 	}
 
 	selectedUser := users[selected-1]
-
-	// Track this selection - use Name if available, otherwise AccountID
 	userIdentifier := selectedUser.Name
 	if userIdentifier == "" {
 		userIdentifier = selectedUser.AccountID
 	}
-	if userIdentifier != "" {
-		state.AddRecentAssignee(userIdentifier)
-		if err := config.SaveState(state, statePath); err != nil {
-			// Log but don't fail - tracking is optional
-			_ = err
-		}
-	}
 
-	return client.AssignTicket(ticketID, selectedUser.AccountID, selectedUser.Name)
+	return selectedUser, userIdentifier, nil
 }
 
 func handleTriage(client jira.JiraClient, reader *bufio.Reader, ticketID string) error {

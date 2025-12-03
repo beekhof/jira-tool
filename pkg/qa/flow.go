@@ -32,109 +32,154 @@ const (
 // Rejected questions are added to history as "Q: [question] - REJECTED" for context.
 // Users can end the Q&A early by entering "skip" or "done".
 // Users can type ":edit" or ":e" during readline input to switch to editor.
-func RunQnAFlow(client gemini.GeminiClient, initialContext string, maxQuestions int, summaryOrKey string, issueTypeName string, existingDescription string, jiraClient jira.JiraClient, ticketKey string, epicLinkFieldID string, answerInputMethod string) (string, error) {
-	history := []string{}
+func RunQnAFlow(
+	client gemini.GeminiClient, initialContext string, maxQuestions int,
+	summaryOrKey, issueTypeName, existingDescription string,
+	jiraClient jira.JiraClient, ticketKey, epicLinkFieldID, answerInputMethod string,
+) (string, error) {
+	answerInputMethod = validateInputMethod(answerInputMethod)
+	enhancedContext := buildEnhancedContext(initialContext, existingDescription, jiraClient, ticketKey, epicLinkFieldID)
+	maxQuestions = normalizeMaxQuestions(maxQuestions)
 
-	// Default to readline_with_preview if not specified
-	if answerInputMethod == "" {
-		answerInputMethod = inputMethodReadlineWithPreview
-	}
-	// Validate method
-	if answerInputMethod != inputMethodReadline &&
-		answerInputMethod != inputMethodEditor &&
-		answerInputMethod != inputMethodReadlineWithPreview {
-		answerInputMethod = inputMethodReadlineWithPreview
-	}
-
-	// Include existing description in context if provided
-	enhancedContext := initialContext
-	if existingDescription != "" {
-		enhancedContext = fmt.Sprintf(
-			"%s\n\nExisting description: %s\n\nImprove or expand this description based on the following questions:",
-			initialContext, existingDescription)
+	history, err := runQuestionLoop(client, enhancedContext, summaryOrKey, issueTypeName, maxQuestions, answerInputMethod)
+	if err != nil {
+		return "", err
 	}
 
-	// Include child ticket summaries in context if available
-	if jiraClient != nil && ticketKey != "" {
-		childSummaries, err := jira.GetChildTickets(jiraClient, ticketKey, epicLinkFieldID)
-		if err == nil && len(childSummaries) > 0 {
-			childContext := "\n\nChild tickets:\n"
-			for i, summary := range childSummaries {
-				childContext += fmt.Sprintf("- %s\n", summary)
-				// Limit to first 20 child tickets to avoid overwhelming context
-				if i >= 19 {
-					remaining := len(childSummaries) - 20
-					if remaining > 0 {
-						childContext += fmt.Sprintf("... and %d more child tickets\n", remaining)
-					}
-					break
-				}
-			}
-			enhancedContext += childContext
-		}
-	}
-
-	// Default to 4 if not specified
-	if maxQuestions <= 0 {
-		maxQuestions = 4
-	}
-
-	// Loop up to maxQuestions times
-	for i := 0; i < maxQuestions; i++ {
-		// Generate a question
-		question, err := client.GenerateQuestion(history, enhancedContext, summaryOrKey, issueTypeName)
-		if err != nil {
-			return "", fmt.Errorf("failed to generate question: %w", err)
-		}
-
-		// Print the question and prompt for answer
-		prompt := fmt.Sprintf("Gemini asks: %s? > ", question)
-
-		// Read the user's answer using enhanced input
-		answer, err := ReadAnswerWithReadline(prompt, answerInputMethod)
-		if err != nil {
-			return "", fmt.Errorf("failed to read answer: %w", err)
-		}
-
-		// Trim whitespace
-		answer = trimSpace(answer)
-		question = trimSpace(question)
-
-		// Show preview and allow editing (if method supports it)
-		answer, err = PreviewAndEditLoop(answer, answerInputMethod)
-		if err != nil {
-			return "", fmt.Errorf("failed to preview/edit answer: %w", err)
-		}
-
-		// Handle rejection (empty string or "reject")
-		if answer == "" || strings.EqualFold(answer, "reject") {
-			fmt.Println("Question rejected, generating a new one...")
-			history = append(history, fmt.Sprintf("Q: %s - REJECTED", question))
-			i-- // Decrement to retry without counting toward maxQuestions
-			continue
-		}
-
-		// Handle skip/done (end Q&A loop)
-		if answer == "skip" || answer == "done" {
-			break
-		}
-
-		// Normal answer - add to history
-		history = append(history, fmt.Sprintf("Q: %s", question), fmt.Sprintf("A: %s", answer))
-	}
-
-	// Generate the final description
 	description, err := client.GenerateDescription(history, enhancedContext, summaryOrKey, issueTypeName)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate description: %w", err)
 	}
 
-	// Add footer to the description
+	return addDescriptionFooter(description), nil
+}
+
+func validateInputMethod(method string) string {
+	if method == "" {
+		return inputMethodReadlineWithPreview
+	}
+	if method != inputMethodReadline && method != inputMethodEditor && method != inputMethodReadlineWithPreview {
+		return inputMethodReadlineWithPreview
+	}
+	return method
+}
+
+func buildEnhancedContext(
+	initialContext, existingDescription string,
+	jiraClient jira.JiraClient, ticketKey, epicLinkFieldID string,
+) string {
+	context := initialContext
+	if existingDescription != "" {
+		context = fmt.Sprintf(
+			"%s\n\nExisting description: %s\n\nImprove or expand this description based on the following questions:",
+			initialContext, existingDescription)
+	}
+
+	if jiraClient != nil && ticketKey != "" {
+		childContext := buildChildTicketContext(jiraClient, ticketKey, epicLinkFieldID)
+		if childContext != "" {
+			context += childContext
+		}
+	}
+
+	return context
+}
+
+func buildChildTicketContext(jiraClient jira.JiraClient, ticketKey, epicLinkFieldID string) string {
+	childSummaries, err := jira.GetChildTickets(jiraClient, ticketKey, epicLinkFieldID)
+	if err != nil || len(childSummaries) == 0 {
+		return ""
+	}
+
+	childContext := "\n\nChild tickets:\n"
+	for i, summary := range childSummaries {
+		childContext += fmt.Sprintf("- %s\n", summary)
+		if i >= 19 {
+			remaining := len(childSummaries) - 20
+			if remaining > 0 {
+				childContext += fmt.Sprintf("... and %d more child tickets\n", remaining)
+			}
+			break
+		}
+	}
+	return childContext
+}
+
+func normalizeMaxQuestions(maxQuestions int) int {
+	if maxQuestions <= 0 {
+		return 4
+	}
+	return maxQuestions
+}
+
+func runQuestionLoop(
+	client gemini.GeminiClient, enhancedContext, summaryOrKey, issueTypeName string,
+	maxQuestions int, answerInputMethod string,
+) ([]string, error) {
+	history := []string{}
+
+	for i := 0; i < maxQuestions; i++ {
+		question, err := client.GenerateQuestion(history, enhancedContext, summaryOrKey, issueTypeName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate question: %w", err)
+		}
+
+		answer, shouldSkip, shouldDone, err := processQuestionAnswer(client, question, answerInputMethod)
+		if err != nil {
+			return nil, err
+		}
+
+		if shouldSkip {
+			if shouldDone {
+				break
+			}
+			history = append(history, fmt.Sprintf("Q: %s - REJECTED", question))
+			i--
+			continue
+		}
+
+		if shouldDone {
+			break
+		}
+
+		history = append(history, fmt.Sprintf("Q: %s", question), fmt.Sprintf("A: %s", answer))
+	}
+
+	return history, nil
+}
+
+func processQuestionAnswer(
+	_ gemini.GeminiClient, question, answerInputMethod string,
+) (answer string, shouldSkip, shouldDone bool, err error) {
+	prompt := fmt.Sprintf("Gemini asks: %s? > ", question)
+	answer, err = ReadAnswerWithReadline(prompt, answerInputMethod)
+	if err != nil {
+		return "", false, false, fmt.Errorf("failed to read answer: %w", err)
+	}
+
+	answer = trimSpace(answer)
+
+	answer, err = PreviewAndEditLoop(answer, answerInputMethod)
+	if err != nil {
+		return "", false, false, fmt.Errorf("failed to preview/edit answer: %w", err)
+	}
+
+	if answer == "" || strings.EqualFold(answer, "reject") {
+		fmt.Println("Question rejected, generating a new one...")
+		return "", false, false, nil
+	}
+
+	if answer == "skip" || answer == "done" {
+		return "", true, true, nil
+	}
+
+	return answer, true, false, nil
+}
+
+func addDescriptionFooter(description string) string {
 	footer := "\n\n---\n\n_This description was generated based on human answers to a " +
 		"limited number of robot questions related to the summary._"
-	description += footer
-
-	return description, nil
+	return description + footer
 }
 
 // trimSpace removes leading and trailing whitespace

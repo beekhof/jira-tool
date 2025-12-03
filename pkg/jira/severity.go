@@ -117,24 +117,48 @@ func (c *jiraClient) GetSeverityFieldValues(fieldID string) ([]string, error) {
 func (c *jiraClient) UpdateTicketSeverity(ticketID, severityFieldID, severityValue string) error {
 	endpoint := fmt.Sprintf("%s/rest/api/2/issue/%s", c.baseURL, ticketID)
 
-	// Severity fields typically require a value object, but some may accept a string directly
-	// Try value object format first (most common for select list fields)
-	payload := map[string]interface{}{
-		"fields": map[string]interface{}{
-			severityFieldID: map[string]interface{}{
-				"value": severityValue,
-			},
-		},
+	payload := buildSeverityPayload(severityFieldID, severityValue, true)
+	resp, bodyStr, err := c.executeSeverityUpdate(endpoint, payload)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return c.handleSeverityUpdateError(resp, bodyStr, endpoint, ticketID, severityFieldID, severityValue)
 	}
 
+	return nil
+}
+
+func buildSeverityPayload(severityFieldID, severityValue string, useValueObject bool) map[string]interface{} {
+	if useValueObject {
+		return map[string]interface{}{
+			"fields": map[string]interface{}{
+				severityFieldID: map[string]interface{}{
+					"value": severityValue,
+				},
+			},
+		}
+	}
+	return map[string]interface{}{
+		"fields": map[string]interface{}{
+			severityFieldID: severityValue,
+		},
+	}
+}
+
+func (c *jiraClient) executeSeverityUpdate(
+	endpoint string, payload map[string]interface{},
+) (*http.Response, string, error) {
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return nil, "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	req, err := http.NewRequest("PUT", endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return nil, "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -142,84 +166,88 @@ func (c *jiraClient) UpdateTicketSeverity(ticketID, severityFieldID, severityVal
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Check response status
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, readErr := io.ReadAll(resp.Body)
-		if readErr != nil {
-			return fmt.Errorf("Jira API returned error: %d %s (failed to read body: %w)", resp.StatusCode, resp.Status, readErr)
-		}
-		bodyStr := string(body)
-
-		if resp.StatusCode == 401 || resp.StatusCode == 403 {
-			return fmt.Errorf("authentication failed. Your Jira token may be invalid. Please run 'jira init'")
-		}
-		if resp.StatusCode == 404 {
-			return fmt.Errorf("ticket %s not found", ticketID)
-		}
-		if resp.StatusCode == 400 {
-			// Try value object format failed, try direct string format
-			payload2 := map[string]interface{}{
-				"fields": map[string]interface{}{
-					severityFieldID: severityValue,
-				},
-			}
-
-			jsonData2, err := json.Marshal(payload2)
-			if err == nil {
-				req2, err := http.NewRequest("PUT", endpoint, bytes.NewBuffer(jsonData2))
-				if err == nil {
-					req2.Header.Set("Content-Type", "application/json")
-					c.setAuth(req2)
-
-					resp2, err := c.httpClient.Do(req2)
-					if err == nil {
-						defer resp2.Body.Close()
-						if resp2.StatusCode >= 200 && resp2.StatusCode < 300 {
-							return nil // Success with direct string format
-						}
-					}
-				}
-			}
-
-			// Both formats failed, parse error message
-			var apiError struct {
-				ErrorMessages []string          `json:"errorMessages"`
-				Errors        map[string]string `json:"errors"`
-			}
-			if err := json.Unmarshal(body, &apiError); err == nil {
-				if len(apiError.ErrorMessages) > 0 {
-					return fmt.Errorf("Jira API error: %s", strings.Join(apiError.ErrorMessages, "; "))
-				}
-				if len(apiError.Errors) > 0 {
-					var errorMsgs []string
-					for k, v := range apiError.Errors {
-						errorMsgs = append(errorMsgs, fmt.Sprintf("%s: %s", k, v))
-					}
-					return fmt.Errorf("Jira API error: %s", strings.Join(errorMsgs, "; "))
-				}
-			}
-			// Check if it's an invalid value error
-			if strings.Contains(bodyStr, "value") ||
-				strings.Contains(bodyStr, "invalid") ||
-				strings.Contains(bodyStr, "not allowed") {
-				return fmt.Errorf(
-					"invalid severity value '%s'. Please check that the value matches one of the allowed values for field %s",
-					severityValue, severityFieldID)
-			}
-			if strings.Contains(bodyStr, "customfield") || strings.Contains(bodyStr, "field") {
-				return fmt.Errorf(
-					"jira API error: %d %s - %s\nnote: the severity field ID (%s) may be incorrect for your Jira instance. "+
-						"You can configure it in your config file with 'severity_field_id'",
-					resp.StatusCode, resp.Status, bodyStr, severityFieldID)
-			}
-			return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
-		}
-		return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
+		return nil, "", fmt.Errorf("failed to execute request: %w", err)
 	}
 
-	return nil
+	body, readErr := io.ReadAll(resp.Body)
+	bodyStr := ""
+	if readErr == nil {
+		bodyStr = string(body)
+	}
+
+	return resp, bodyStr, nil
+}
+
+func (c *jiraClient) handleSeverityUpdateError(
+	resp *http.Response, bodyStr, endpoint, ticketID, severityFieldID, severityValue string,
+) error {
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return fmt.Errorf("authentication failed. Your Jira token may be invalid. Please run 'jira init'")
+	}
+	if resp.StatusCode == 404 {
+		return fmt.Errorf("ticket %s not found", ticketID)
+	}
+	if resp.StatusCode == 400 {
+		return c.handle400SeverityError(resp, bodyStr, endpoint, severityFieldID, severityValue)
+	}
+	return fmt.Errorf("Jira API returned error: %d %s - %s", resp.StatusCode, resp.Status, bodyStr)
+}
+
+func (c *jiraClient) handle400SeverityError(
+	resp *http.Response, bodyStr, endpoint, severityFieldID, severityValue string,
+) error {
+	payload2 := buildSeverityPayload(severityFieldID, severityValue, false)
+	resp2, _, err := c.executeSeverityUpdate(endpoint, payload2)
+	if err == nil && resp2 != nil {
+		defer resp2.Body.Close()
+		if resp2.StatusCode >= 200 && resp2.StatusCode < 300 {
+			return nil
+		}
+	}
+
+	return parseSeverityError(bodyStr, resp.StatusCode, resp.Status, severityFieldID, severityValue)
+}
+
+func parseSeverityError(bodyStr string, statusCode int, status, severityFieldID, severityValue string) error {
+	var apiError struct {
+		ErrorMessages []string          `json:"errorMessages"`
+		Errors        map[string]string `json:"errors"`
+	}
+	if err := json.Unmarshal([]byte(bodyStr), &apiError); err == nil {
+		if len(apiError.ErrorMessages) > 0 {
+			return fmt.Errorf("Jira API error: %s", strings.Join(apiError.ErrorMessages, "; "))
+		}
+		if len(apiError.Errors) > 0 {
+			var errorMsgs []string
+			for k, v := range apiError.Errors {
+				errorMsgs = append(errorMsgs, fmt.Sprintf("%s: %s", k, v))
+			}
+			return fmt.Errorf("Jira API error: %s", strings.Join(errorMsgs, "; "))
+		}
+	}
+
+	if isInvalidValueError(bodyStr) {
+		return fmt.Errorf(
+			"invalid severity value '%s'. Please check that the value matches one of the allowed values for field %s",
+			severityValue, severityFieldID)
+	}
+
+	if isFieldError(bodyStr) {
+		return fmt.Errorf(
+			"jira API error: %d %s - %s\nnote: the severity field ID (%s) may be incorrect for your Jira instance. "+
+				"You can configure it in your config file with 'severity_field_id'",
+			statusCode, status, bodyStr, severityFieldID)
+	}
+
+	return fmt.Errorf("Jira API returned error: %d %s - %s", statusCode, status, bodyStr)
+}
+
+func isInvalidValueError(bodyStr string) bool {
+	return strings.Contains(bodyStr, "value") ||
+		strings.Contains(bodyStr, "invalid") ||
+		strings.Contains(bodyStr, "not allowed")
+}
+
+func isFieldError(bodyStr string) bool {
+	return strings.Contains(bodyStr, "customfield") || strings.Contains(bodyStr, "field")
 }

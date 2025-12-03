@@ -32,176 +32,34 @@ func init() {
 	utilsCmd.AddCommand(initCmd)
 }
 
-func runInit(cmd *cobra.Command, args []string) error {
+func runInit(_ *cobra.Command, _ []string) error {
 	reader := bufio.NewReader(os.Stdin)
 	configDir := GetConfigDir()
 	configPath := config.GetConfigPath(configDir)
 
-	// Try to load existing config
-	var existingCfg *config.Config
-	var err error
-	existingCfg, err = config.LoadConfig(configPath)
+	existingCfg, err := config.LoadConfig(configPath)
 	if err != nil {
-		// Config doesn't exist yet, that's okay
 		existingCfg = nil
 	}
 
-	// Prompt for Jira URL
-	prompt := "Jira URL (e.g., https://your-company.atlassian.net)"
-	if existingCfg != nil && existingCfg.JiraURL != "" {
-		prompt = fmt.Sprintf("%s [%s]", prompt, existingCfg.JiraURL)
-	}
-	fmt.Printf("%s: ", prompt)
-	jiraURL, err := reader.ReadString('\n')
+	jiraURL, jiraToken, geminiKey, err := promptBasicConfig(reader, existingCfg, configDir)
 	if err != nil {
-		return fmt.Errorf("failed to read Jira URL: %w", err)
-	}
-	jiraURL = strings.TrimSpace(jiraURL)
-	if jiraURL == "" && existingCfg != nil {
-		jiraURL = existingCfg.JiraURL
+		return err
 	}
 
-	// Prompt for Jira API Token (password input)
-	fmt.Print("Jira API Token (press Enter to keep existing): ")
-	jiraTokenBytes, err := term.ReadPassword(syscall.Stdin)
+	defaultProject, defaultTaskType, err := promptProjectConfig(reader, existingCfg)
 	if err != nil {
-		return fmt.Errorf("failed to read Jira token: %w", err)
-	}
-	jiraToken := string(jiraTokenBytes)
-	fmt.Println() // New line after password input
-	// If empty, try to get existing token
-	if jiraToken == "" {
-		var err error
-		jiraToken, err = credentials.GetSecret(credentials.JiraServiceKey, "", configDir)
-		if err != nil {
-			// No existing token, that's okay
-			jiraToken = ""
-		}
+		return err
 	}
 
-	// Prompt for Gemini API Key (password input)
-	fmt.Print("Gemini API Key (press Enter to keep existing): ")
-	geminiKeyBytes, err := term.ReadPassword(syscall.Stdin)
-	if err != nil {
-		return fmt.Errorf("failed to read Gemini key: %w", err)
-	}
-	geminiKey := string(geminiKeyBytes)
-	fmt.Println() // New line after password input
-	// If empty, try to get existing key
-	if geminiKey == "" {
-		var err error
-		geminiKey, err = credentials.GetSecret(credentials.GeminiServiceKey, "", configDir)
-		if err != nil {
-			// No existing key, that's okay
-			geminiKey = ""
-		}
+	if err := storeCredentials(jiraToken, geminiKey, configDir); err != nil {
+		return err
 	}
 
-	// Prompt for default project
-	prompt = "Default Project Key (e.g., ENG)"
-	if existingCfg != nil && existingCfg.DefaultProject != "" {
-		prompt = fmt.Sprintf("%s [%s]", prompt, existingCfg.DefaultProject)
-	}
-	fmt.Printf("%s: ", prompt)
-	defaultProject, err := reader.ReadString('\n')
-	if err != nil {
-		return fmt.Errorf("failed to read default project: %w", err)
-	}
-	defaultProject = strings.TrimSpace(defaultProject)
-	if defaultProject == "" && existingCfg != nil {
-		defaultProject = existingCfg.DefaultProject
-	}
+	storyPointsFieldID := detectStoryPointsFieldID(jiraURL, jiraToken, existingCfg)
 
-	// Prompt for default task type
-	prompt = "Default Task Type (e.g., Task)"
-	if existingCfg != nil && existingCfg.DefaultTaskType != "" {
-		prompt = fmt.Sprintf("%s [%s]", prompt, existingCfg.DefaultTaskType)
-	}
-	fmt.Printf("%s: ", prompt)
-	defaultTaskType, err := reader.ReadString('\n')
-	if err != nil {
-		return fmt.Errorf("failed to read default task type: %w", err)
-	}
-	defaultTaskType = strings.TrimSpace(defaultTaskType)
-	if defaultTaskType == "" && existingCfg != nil {
-		defaultTaskType = existingCfg.DefaultTaskType
-	}
+	epicLinkFieldID := detectEpicLinkFieldID(jiraURL, jiraToken, defaultProject, existingCfg, configDir)
 
-	// Store API keys in credentials file first (needed for field detection)
-	// Use empty string for user since we don't need it for Bearer token auth
-	if jiraToken != "" {
-		if err := credentials.StoreSecret(credentials.JiraServiceKey, "", jiraToken, configDir); err != nil {
-			return fmt.Errorf("failed to store Jira token: %w", err)
-		}
-	}
-
-	if geminiKey != "" {
-		if err := credentials.StoreSecret(credentials.GeminiServiceKey, "", geminiKey, configDir); err != nil {
-			return fmt.Errorf("failed to store Gemini key: %w", err)
-		}
-	}
-
-	// Try to detect story points field ID if we have a token and URL
-	var storyPointsFieldID string
-	if jiraToken != "" && jiraURL != "" {
-		fmt.Println("\nDetecting story points field ID...")
-		detectedID, err := detectStoryPointsField(jiraURL, jiraToken)
-		if err != nil {
-			fmt.Printf("Warning: Could not detect story points field ID: %v\n", err)
-			if existingCfg != nil && existingCfg.StoryPointsFieldID != "" {
-				storyPointsFieldID = existingCfg.StoryPointsFieldID
-				fmt.Printf("Keeping existing value: %s\n", storyPointsFieldID)
-			} else {
-				storyPointsFieldID = "customfield_10016"
-				fmt.Println("Using default: customfield_10016")
-			}
-		} else {
-			storyPointsFieldID = detectedID
-			fmt.Printf("Detected story points field ID: %s\n", storyPointsFieldID)
-		}
-	} else {
-		// Use existing value or default
-		if existingCfg != nil && existingCfg.StoryPointsFieldID != "" {
-			storyPointsFieldID = existingCfg.StoryPointsFieldID
-		} else {
-			storyPointsFieldID = "customfield_10016"
-		}
-	}
-
-	// Try to detect Epic Link field ID if we have a token and URL
-	var epicLinkFieldID string
-	if jiraToken != "" && jiraURL != "" {
-		fmt.Println("\nDetecting Epic Link field ID...")
-		// Create temporary client for detection
-		tempClient, err := jira.NewClient(configDir, true) // noCache for detection
-		if err == nil && defaultProject != "" {
-			detectedID, err := tempClient.DetectEpicLinkField(defaultProject)
-			if err != nil {
-				fmt.Printf("Warning: Could not detect Epic Link field ID: %v\n", err)
-				if existingCfg != nil && existingCfg.EpicLinkFieldID != "" {
-					epicLinkFieldID = existingCfg.EpicLinkFieldID
-					fmt.Printf("Keeping existing value: %s\n", epicLinkFieldID)
-				}
-			} else if detectedID != "" {
-				epicLinkFieldID = detectedID
-				fmt.Printf("Detected Epic Link field ID: %s\n", epicLinkFieldID)
-			} else {
-				if existingCfg != nil && existingCfg.EpicLinkFieldID != "" {
-					epicLinkFieldID = existingCfg.EpicLinkFieldID
-					fmt.Printf("Epic Link field not detected, keeping existing value: %s\n", epicLinkFieldID)
-				} else {
-					fmt.Println("Epic Link field not detected (optional)")
-				}
-			}
-		} else if existingCfg != nil && existingCfg.EpicLinkFieldID != "" {
-			epicLinkFieldID = existingCfg.EpicLinkFieldID
-		}
-	} else if existingCfg != nil && existingCfg.EpicLinkFieldID != "" {
-		// Use existing value if present
-		epicLinkFieldID = existingCfg.EpicLinkFieldID
-	}
-
-	// Merge with existing config to preserve all settings
 	cfg := &config.Config{
 		JiraURL:            jiraURL,
 		DefaultProject:     defaultProject,
@@ -210,32 +68,216 @@ func runInit(cmd *cobra.Command, args []string) error {
 		EpicLinkFieldID:    epicLinkFieldID,
 	}
 
-	// Preserve existing values if they exist
-	if existingCfg != nil {
-		if cfg.GeminiModel == "" {
-			cfg.GeminiModel = existingCfg.GeminiModel
-		}
-		if cfg.MaxQuestions == 0 {
-			cfg.MaxQuestions = existingCfg.MaxQuestions
-		}
-		if len(cfg.StoryPointOptions) == 0 {
-			cfg.StoryPointOptions = existingCfg.StoryPointOptions
-		}
-		// Recent selections are stored in state.yaml, not config.yaml
-		cfg.QuestionPromptTemplate = existingCfg.QuestionPromptTemplate
-		cfg.DescriptionPromptTemplate = existingCfg.DescriptionPromptTemplate
-		cfg.SpikeQuestionPromptTemplate = existingCfg.SpikeQuestionPromptTemplate
-		cfg.SpikePromptTemplate = existingCfg.SpikePromptTemplate
-		cfg.ReviewPageSize = existingCfg.ReviewPageSize
-		cfg.DescriptionMinLength = existingCfg.DescriptionMinLength
-		cfg.DescriptionQualityAI = existingCfg.DescriptionQualityAI
-		cfg.SeverityFieldID = existingCfg.SeverityFieldID
-		cfg.SeverityValues = existingCfg.SeverityValues
-		cfg.DefaultBoardID = existingCfg.DefaultBoardID
-		cfg.AnswerInputMethod = existingCfg.AnswerInputMethod
+	mergeExistingConfig(cfg, existingCfg)
+	setDefaultValues(cfg)
+
+	if err := promptAdvancedSettings(reader, cfg, existingCfg, defaultProject, configDir); err != nil {
+		return err
 	}
 
-	// Set defaults if no existing config
+	if err := config.SaveConfig(cfg, configPath); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	fmt.Println("Configuration saved successfully!")
+	return nil
+}
+
+func promptBasicConfig(
+	reader *bufio.Reader, existingCfg *config.Config, configDir string,
+) (jiraURL, jiraToken, geminiKey string, err error) {
+	jiraURL, err = promptWithDefault(
+		reader, "Jira URL (e.g., https://your-company.atlassian.net)", existingCfg,
+		func(c *config.Config) string { return c.JiraURL })
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to read Jira URL: %w", err)
+	}
+
+	jiraToken, err = promptPassword(
+		"Jira API Token (press Enter to keep existing)", credentials.JiraServiceKey, configDir)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to read Jira token: %w", err)
+	}
+
+	geminiKey, err = promptPassword(
+		"Gemini API Key (press Enter to keep existing)", credentials.GeminiServiceKey, configDir)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to read Gemini key: %w", err)
+	}
+
+	return jiraURL, jiraToken, geminiKey, nil
+}
+
+func promptWithDefault(
+	reader *bufio.Reader, promptText string, existingCfg *config.Config,
+	getValue func(*config.Config) string,
+) (string, error) {
+	prompt := promptText
+	if existingCfg != nil {
+		if value := getValue(existingCfg); value != "" {
+			prompt = fmt.Sprintf("%s [%s]", prompt, value)
+		}
+	}
+	fmt.Printf("%s: ", prompt)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	input = strings.TrimSpace(input)
+	if input == "" && existingCfg != nil {
+		return getValue(existingCfg), nil
+	}
+	return input, nil
+}
+
+func promptPassword(promptText, serviceKey, configDir string) (string, error) {
+	fmt.Print(promptText + ": ")
+	tokenBytes, err := term.ReadPassword(syscall.Stdin)
+	if err != nil {
+		return "", err
+	}
+	token := string(tokenBytes)
+	fmt.Println()
+	if token == "" {
+		token, err = credentials.GetSecret(serviceKey, "", configDir)
+		if err != nil {
+			token = ""
+		}
+	}
+	return token, nil
+}
+
+func promptProjectConfig(
+	reader *bufio.Reader, existingCfg *config.Config,
+) (defaultProject, defaultTaskType string, err error) {
+	defaultProject, err = promptWithDefault(
+		reader, "Default Project Key (e.g., ENG)", existingCfg,
+		func(c *config.Config) string { return c.DefaultProject })
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read default project: %w", err)
+	}
+
+	defaultTaskType, err = promptWithDefault(
+		reader, "Default Task Type (e.g., Task)", existingCfg,
+		func(c *config.Config) string { return c.DefaultTaskType })
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read default task type: %w", err)
+	}
+
+	return defaultProject, defaultTaskType, nil
+}
+
+func storeCredentials(jiraToken, geminiKey, configDir string) error {
+	if jiraToken != "" {
+		if err := credentials.StoreSecret(credentials.JiraServiceKey, "", jiraToken, configDir); err != nil {
+			return fmt.Errorf("failed to store Jira token: %w", err)
+		}
+	}
+	if geminiKey != "" {
+		if err := credentials.StoreSecret(credentials.GeminiServiceKey, "", geminiKey, configDir); err != nil {
+			return fmt.Errorf("failed to store Gemini key: %w", err)
+		}
+	}
+	return nil
+}
+
+func detectStoryPointsFieldID(jiraURL, jiraToken string, existingCfg *config.Config) string {
+	if jiraToken == "" || jiraURL == "" {
+		if existingCfg != nil && existingCfg.StoryPointsFieldID != "" {
+			return existingCfg.StoryPointsFieldID
+		}
+		return "customfield_10016"
+	}
+
+	fmt.Println("\nDetecting story points field ID...")
+	detectedID, err := detectStoryPointsField(jiraURL, jiraToken)
+	if err != nil {
+		fmt.Printf("Warning: Could not detect story points field ID: %v\n", err)
+		if existingCfg != nil && existingCfg.StoryPointsFieldID != "" {
+			fmt.Printf("Keeping existing value: %s\n", existingCfg.StoryPointsFieldID)
+			return existingCfg.StoryPointsFieldID
+		}
+		fmt.Println("Using default: customfield_10016")
+		return "customfield_10016"
+	}
+
+	fmt.Printf("Detected story points field ID: %s\n", detectedID)
+	return detectedID
+}
+
+func detectEpicLinkFieldID(
+	jiraURL, jiraToken, defaultProject string,
+	existingCfg *config.Config, configDir string,
+) string {
+	if jiraToken == "" || jiraURL == "" {
+		if existingCfg != nil && existingCfg.EpicLinkFieldID != "" {
+			return existingCfg.EpicLinkFieldID
+		}
+		return ""
+	}
+
+	fmt.Println("\nDetecting Epic Link field ID...")
+	tempClient, err := jira.NewClient(configDir, true)
+	if err != nil || defaultProject == "" {
+		if existingCfg != nil && existingCfg.EpicLinkFieldID != "" {
+			return existingCfg.EpicLinkFieldID
+		}
+		return ""
+	}
+
+	detectedID, err := tempClient.DetectEpicLinkField(defaultProject)
+	if err != nil {
+		fmt.Printf("Warning: Could not detect Epic Link field ID: %v\n", err)
+		if existingCfg != nil && existingCfg.EpicLinkFieldID != "" {
+			fmt.Printf("Keeping existing value: %s\n", existingCfg.EpicLinkFieldID)
+			return existingCfg.EpicLinkFieldID
+		}
+		return ""
+	}
+
+	if detectedID != "" {
+		fmt.Printf("Detected Epic Link field ID: %s\n", detectedID)
+		return detectedID
+	}
+
+	if existingCfg != nil && existingCfg.EpicLinkFieldID != "" {
+		fmt.Printf("Epic Link field not detected, keeping existing value: %s\n", existingCfg.EpicLinkFieldID)
+		return existingCfg.EpicLinkFieldID
+	}
+
+	fmt.Println("Epic Link field not detected (optional)")
+	return ""
+}
+
+func mergeExistingConfig(cfg, existingCfg *config.Config) {
+	if existingCfg == nil {
+		return
+	}
+
+	if cfg.GeminiModel == "" {
+		cfg.GeminiModel = existingCfg.GeminiModel
+	}
+	if cfg.MaxQuestions == 0 {
+		cfg.MaxQuestions = existingCfg.MaxQuestions
+	}
+	if len(cfg.StoryPointOptions) == 0 {
+		cfg.StoryPointOptions = existingCfg.StoryPointOptions
+	}
+	cfg.QuestionPromptTemplate = existingCfg.QuestionPromptTemplate
+	cfg.DescriptionPromptTemplate = existingCfg.DescriptionPromptTemplate
+	cfg.SpikeQuestionPromptTemplate = existingCfg.SpikeQuestionPromptTemplate
+	cfg.SpikePromptTemplate = existingCfg.SpikePromptTemplate
+	cfg.ReviewPageSize = existingCfg.ReviewPageSize
+	cfg.DescriptionMinLength = existingCfg.DescriptionMinLength
+	cfg.DescriptionQualityAI = existingCfg.DescriptionQualityAI
+	cfg.SeverityFieldID = existingCfg.SeverityFieldID
+	cfg.SeverityValues = existingCfg.SeverityValues
+	cfg.DefaultBoardID = existingCfg.DefaultBoardID
+	cfg.AnswerInputMethod = existingCfg.AnswerInputMethod
+	cfg.TicketFilter = existingCfg.TicketFilter
+}
+
+func setDefaultValues(cfg *config.Config) {
 	if cfg.GeminiModel == "" {
 		cfg.GeminiModel = "gemini-2.5-flash"
 	}
@@ -248,8 +290,36 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if cfg.DescriptionMinLength == 0 {
 		cfg.DescriptionMinLength = 128
 	}
+}
 
-	// Prompt for description quality settings
+func promptAdvancedSettings(
+	reader *bufio.Reader, cfg, existingCfg *config.Config,
+	defaultProject, configDir string,
+) error {
+	if err := promptDescriptionQuality(reader, cfg, existingCfg); err != nil {
+		return err
+	}
+
+	if err := promptSeveritySettings(reader, cfg, existingCfg, defaultProject, configDir); err != nil {
+		return err
+	}
+
+	if err := promptBoardID(reader, cfg, existingCfg); err != nil {
+		return err
+	}
+
+	if err := promptAnswerInputMethod(reader, cfg, existingCfg); err != nil {
+		return err
+	}
+
+	if err := promptTicketFilter(reader, cfg, existingCfg); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func promptDescriptionQuality(reader *bufio.Reader, cfg, existingCfg *config.Config) error {
 	fmt.Print("\nDescription minimum length (characters) [default: 128]: ")
 	descLenInput, err := reader.ReadString('\n')
 	if err == nil {
@@ -278,7 +348,13 @@ func runInit(cmd *cobra.Command, args []string) error {
 		cfg.DescriptionQualityAI = existingCfg.DescriptionQualityAI
 	}
 
-	// Prompt for severity field ID
+	return nil
+}
+
+func promptSeveritySettings(
+	reader *bufio.Reader, cfg, existingCfg *config.Config,
+	defaultProject, configDir string,
+) error {
 	fmt.Print("\nSeverity field ID [auto-detect/enter manually/skip]: ")
 	severityInput, err := reader.ReadString('\n')
 	if err == nil {
@@ -288,54 +364,66 @@ func runInit(cmd *cobra.Command, args []string) error {
 				cfg.SeverityFieldID = existingCfg.SeverityFieldID
 			}
 		} else if strings.EqualFold(severityInput, "auto-detect") || strings.EqualFold(severityInput, "auto") {
-			// Try to auto-detect severity field
-			fmt.Println("Detecting severity field ID...")
-			jiraClient, err := jira.NewClient(configDir, false)
-			if err == nil {
-				detectedID, err := jiraClient.DetectSeverityField(defaultProject)
-				if err == nil && detectedID != "" {
-					cfg.SeverityFieldID = detectedID
-					fmt.Printf("Detected severity field ID: %s\n", detectedID)
-				} else {
-					fmt.Printf("Warning: Could not detect severity field ID: %v\n", err)
-					if existingCfg != nil && existingCfg.SeverityFieldID != "" {
-						cfg.SeverityFieldID = existingCfg.SeverityFieldID
-						fmt.Printf("Keeping existing value: %s\n", cfg.SeverityFieldID)
-					}
-				}
-			} else {
-				fmt.Printf("Warning: Could not create Jira client for auto-detection: %v\n", err)
-				if existingCfg != nil && existingCfg.SeverityFieldID != "" {
-					cfg.SeverityFieldID = existingCfg.SeverityFieldID
-				}
+			if err := detectSeverityField(cfg, existingCfg, defaultProject, configDir); err != nil {
+				return err
 			}
 		} else {
-			// Manual entry
 			cfg.SeverityFieldID = severityInput
 		}
 	} else if existingCfg != nil {
 		cfg.SeverityFieldID = existingCfg.SeverityFieldID
 	}
 
-	// Prompt for severity values if severity field is configured
 	if cfg.SeverityFieldID != "" {
-		fmt.Print("\nSeverity values (comma-separated, e.g., 'Low,Medium,High,Critical' " +
-			"or 'skip' to use Jira API values only): ")
-		severityValuesInput, err := reader.ReadString('\n')
-		if err == nil {
-			severityValuesInput = strings.TrimSpace(severityValuesInput)
-			if severityValuesInput != "" && !strings.EqualFold(severityValuesInput, "skip") {
-				// Parse comma-separated values
-				values := strings.Split(severityValuesInput, ",")
-				cfg.SeverityValues = make([]string, 0, len(values))
-				for _, v := range values {
-					trimmed := strings.TrimSpace(v)
-					if trimmed != "" {
-						cfg.SeverityValues = append(cfg.SeverityValues, trimmed)
-					}
+		if err := promptSeverityValues(reader, cfg, existingCfg); err != nil {
+			return err
+		}
+	} else if existingCfg != nil && len(existingCfg.SeverityValues) > 0 {
+		cfg.SeverityValues = existingCfg.SeverityValues
+	}
+
+	return nil
+}
+
+func detectSeverityField(cfg, existingCfg *config.Config, defaultProject, configDir string) error {
+	fmt.Println("Detecting severity field ID...")
+	jiraClient, err := jira.NewClient(configDir, false)
+	if err != nil {
+		fmt.Printf("Warning: Could not create Jira client for auto-detection: %v\n", err)
+		if existingCfg != nil && existingCfg.SeverityFieldID != "" {
+			cfg.SeverityFieldID = existingCfg.SeverityFieldID
+		}
+		return nil
+	}
+
+	detectedID, err := jiraClient.DetectSeverityField(defaultProject)
+	if err == nil && detectedID != "" {
+		cfg.SeverityFieldID = detectedID
+		fmt.Printf("Detected severity field ID: %s\n", detectedID)
+	} else {
+		fmt.Printf("Warning: Could not detect severity field ID: %v\n", err)
+		if existingCfg != nil && existingCfg.SeverityFieldID != "" {
+			cfg.SeverityFieldID = existingCfg.SeverityFieldID
+			fmt.Printf("Keeping existing value: %s\n", cfg.SeverityFieldID)
+		}
+	}
+	return nil
+}
+
+func promptSeverityValues(reader *bufio.Reader, cfg, existingCfg *config.Config) error {
+	fmt.Print("\nSeverity values (comma-separated, e.g., 'Low,Medium,High,Critical' " +
+		"or 'skip' to use Jira API values only): ")
+	severityValuesInput, err := reader.ReadString('\n')
+	if err == nil {
+		severityValuesInput = strings.TrimSpace(severityValuesInput)
+		if severityValuesInput != "" && !strings.EqualFold(severityValuesInput, "skip") {
+			values := strings.Split(severityValuesInput, ",")
+			cfg.SeverityValues = make([]string, 0, len(values))
+			for _, v := range values {
+				trimmed := strings.TrimSpace(v)
+				if trimmed != "" {
+					cfg.SeverityValues = append(cfg.SeverityValues, trimmed)
 				}
-			} else if existingCfg != nil && len(existingCfg.SeverityValues) > 0 {
-				cfg.SeverityValues = existingCfg.SeverityValues
 			}
 		} else if existingCfg != nil && len(existingCfg.SeverityValues) > 0 {
 			cfg.SeverityValues = existingCfg.SeverityValues
@@ -343,8 +431,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 	} else if existingCfg != nil && len(existingCfg.SeverityValues) > 0 {
 		cfg.SeverityValues = existingCfg.SeverityValues
 	}
+	return nil
+}
 
-	// Prompt for default board ID
+func promptBoardID(reader *bufio.Reader, cfg, existingCfg *config.Config) error {
 	fmt.Print("\nDefault board ID (optional, press Enter to skip): ")
 	boardIDInput, err := reader.ReadString('\n')
 	if err == nil {
@@ -361,9 +451,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 	} else if existingCfg != nil {
 		cfg.DefaultBoardID = existingCfg.DefaultBoardID
 	}
+	return nil
+}
 
-	// Prompt for answer input method
-	prompt = "Answer input method [readline/editor/readline_with_preview]"
+func promptAnswerInputMethod(reader *bufio.Reader, cfg, existingCfg *config.Config) error {
+	prompt := "Answer input method [readline/editor/readline_with_preview]"
 	if existingCfg != nil && existingCfg.AnswerInputMethod != "" {
 		prompt = fmt.Sprintf("%s [%s]", prompt, existingCfg.AnswerInputMethod)
 	}
@@ -372,7 +464,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if err == nil {
 		answerInputMethodInput = strings.TrimSpace(answerInputMethodInput)
 		if answerInputMethodInput != "" {
-			// Validate input
 			validMethods := map[string]bool{
 				"readline":              true,
 				"editor":                true,
@@ -383,20 +474,22 @@ func runInit(cmd *cobra.Command, args []string) error {
 			} else if existingCfg != nil && existingCfg.AnswerInputMethod != "" {
 				cfg.AnswerInputMethod = existingCfg.AnswerInputMethod
 			} else {
-				cfg.AnswerInputMethod = defaultInputMethod // Default
+				cfg.AnswerInputMethod = defaultInputMethod
 			}
 		} else if existingCfg != nil && existingCfg.AnswerInputMethod != "" {
 			cfg.AnswerInputMethod = existingCfg.AnswerInputMethod
 		} else {
-			cfg.AnswerInputMethod = "readline" // Default
+			cfg.AnswerInputMethod = "readline"
 		}
 	} else if existingCfg != nil && existingCfg.AnswerInputMethod != "" {
 		cfg.AnswerInputMethod = existingCfg.AnswerInputMethod
 	} else {
-		cfg.AnswerInputMethod = "readline" // Default
+		cfg.AnswerInputMethod = "readline"
 	}
+	return nil
+}
 
-	// Prompt for ticket filter
+func promptTicketFilter(reader *bufio.Reader, cfg, existingCfg *config.Config) error {
 	fmt.Print("\nTicket filter (JQL to append to all ticket queries, optional, press Enter to skip): ")
 	filterInput, err := reader.ReadString('\n')
 	if err == nil {
@@ -409,12 +502,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 	} else if existingCfg != nil {
 		cfg.TicketFilter = existingCfg.TicketFilter
 	}
-
-	if err := config.SaveConfig(cfg, configPath); err != nil {
-		return fmt.Errorf("failed to save config: %w", err)
-	}
-
-	fmt.Println("Configuration saved successfully!")
 	return nil
 }
 

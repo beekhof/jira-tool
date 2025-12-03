@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const actionToggle = "toggle"
+
 var estimateCmd = &cobra.Command{
 	Use:   "estimate [TICKET_ID]",
 	Short: "Estimate story points for a ticket",
@@ -155,28 +157,44 @@ func estimateSingleTicket(
 
 // estimateMultipleTickets shows a paginated list and allows selecting multiple tickets
 func estimateMultipleTickets(client jira.JiraClient, cfg *config.Config, storyPoints []int, configDir string) error {
-	// Get story points field ID from config
+	issues, err := fetchTicketsWithoutStoryPoints(client, cfg)
+	if err != nil {
+		return err
+	}
+
+	if len(issues) == 0 {
+		fmt.Println("No tickets found without story points.")
+		return nil
+	}
+
+	if len(issues) == 1 {
+		selected := map[string]bool{issues[0].Key: true}
+		return estimateSelectedTickets(client, cfg, issues, selected, storyPoints, configDir)
+	}
+
+	return runEstimatePagination(client, cfg, issues, storyPoints, configDir)
+}
+
+func fetchTicketsWithoutStoryPoints(client jira.JiraClient, cfg *config.Config) ([]jira.Issue, error) {
 	storyPointsFieldID := cfg.StoryPointsFieldID
 	if storyPointsFieldID == "" {
 		storyPointsFieldID = "customfield_10016"
 	}
 
-	// Build JQL to find tickets without story points
 	project := cfg.DefaultProject
 	if project == "" {
-		return fmt.Errorf("default_project not configured. Please run 'jira init'")
+		return nil, fmt.Errorf("default_project not configured. Please run 'jira init'")
 	}
 
 	jql := fmt.Sprintf("project = %s AND %s is EMPTY ORDER BY updated DESC", project, storyPointsFieldID)
-	// Apply ticket filter
 	filter := GetTicketFilter(cfg)
 	jql = jira.ApplyTicketFilter(jql, filter)
+
 	allIssues, err := client.SearchTickets(jql)
 	if err != nil {
-		return fmt.Errorf("failed to search tickets: %w", err)
+		return nil, fmt.Errorf("failed to search tickets: %w", err)
 	}
 
-	// Filter to only tickets without story points (in case the field ID doesn't match)
 	issues := []jira.Issue{}
 	for i := range allIssues {
 		issue := &allIssues[i]
@@ -185,172 +203,186 @@ func estimateMultipleTickets(client jira.JiraClient, cfg *config.Config, storyPo
 		}
 	}
 
-	if len(issues) == 0 {
-		fmt.Println("No tickets found without story points.")
-		return nil
-	}
+	return issues, nil
+}
 
-	// If only one ticket, automatically select it and proceed
-	if len(issues) == 1 {
-		selected := make(map[string]bool)
-		selected[issues[0].Key] = true
-		return estimateSelectedTickets(client, cfg, issues, selected, storyPoints, configDir)
-	}
-
-	// Get page size from config (default 10)
+func runEstimatePagination(
+	client jira.JiraClient, cfg *config.Config, issues []jira.Issue,
+	storyPoints []int, configDir string,
+) error {
 	pageSize := cfg.ReviewPageSize
 	if pageSize <= 0 {
 		pageSize = 10
 	}
 
 	reader := bufio.NewReader(os.Stdin)
-
-	// Track selected tickets
 	selected := make(map[string]bool)
-
-	// Current page index
 	currentPage := 0
 	totalPages := (len(issues) + pageSize - 1) / pageSize
 
 	for {
-		// Calculate page boundaries
 		start := currentPage * pageSize
 		end := start + pageSize
 		if end > len(issues) {
 			end = len(issues)
 		}
-
 		pageIssues := issues[start:end]
 
-		// Count selected tickets
-		selectedCount := 0
-		for _, v := range selected {
-			if v {
-				selectedCount++
-			}
-		}
+		displayEstimatePage(pageIssues, start, currentPage, totalPages, len(issues), selected)
 
-		// Display page header
-		fmt.Printf("\n=== Page %d of %d (%d tickets, %d selected) ===\n\n",
-			currentPage+1, totalPages, len(issues), selectedCount)
-
-		// Display tickets in a table format
-		fmt.Printf("%-4s %-12s %-50s %-12s %-20s %-8s\n", "#", "Key", "Summary", "Priority", "Assignee", "Status")
-		fmt.Println(strings.Repeat("-", 110))
-
-		for i := range pageIssues {
-			issue := &pageIssues[i]
-			idx := start + i + 1
-
-			// Get priority and assignee
-			priority := getPriorityName(issue)
-			assignee := getAssigneeName(issue)
-
-			// Truncate summary if too long
-			summary := issue.Fields.Summary
-			if len(summary) > 48 {
-				summary = summary[:45] + "..."
-			}
-
-			// Mark if selected
-			marker := ""
-			if selected[issue.Key] {
-				marker = "✓ "
-			}
-
-			fmt.Printf("%-4d %-12s %-50s %-12s %-20s %-8s %s\n",
-				idx, issue.Key, summary, priority, assignee, issue.Fields.Status.Name, marker)
-		}
-
-		fmt.Println()
-		fmt.Printf("Actions: [1-%d] toggle ticket | [m]ark all | [u]nmark all | "+
-			"[e]stimate selected | [n]ext | [p]rev | [q]uit\n", len(pageIssues))
-		fmt.Print("> ")
-
-		// Read user input
 		input, err := reader.ReadString('\n')
 		if err != nil {
 			return fmt.Errorf("failed to read input: %w", err)
 		}
 		input = strings.TrimSpace(strings.ToLower(input))
 
-		// Handle navigation
-		if input == "n" || input == "next" {
-			if currentPage < totalPages-1 {
-				currentPage++
-			} else {
-				fmt.Println("Already on last page.")
-			}
-			continue
-		}
-
-		if input == "p" || input == "prev" {
-			if currentPage > 0 {
-				currentPage--
-			} else {
-				fmt.Println("Already on first page.")
-			}
-			continue
-		}
-
-		if input == "q" || input == "quit" {
+		action, newPage, shouldQuit, shouldEstimate := processEstimateInput(
+			input, currentPage, totalPages, len(issues), selected, pageIssues)
+		if shouldQuit {
 			return nil
 		}
-
-		if input == "m" || input == "mark all" {
-			// Mark all tickets on current page
-			for i := range pageIssues {
-				selected[pageIssues[i].Key] = true
-			}
-			fmt.Printf("Marked %d tickets on this page.\n", len(pageIssues))
-			continue
-		}
-
-		if input == "u" || input == "unmark all" {
-			// Unmark all tickets on current page
-			for i := range pageIssues {
-				selected[pageIssues[i].Key] = false
-			}
-			fmt.Printf("Unmarked %d tickets on this page.\n", len(pageIssues))
-			continue
-		}
-
-		if input == "e" || input == "estimate" {
-			// Count selected tickets
-			selectedCount := 0
-			for _, v := range selected {
-				if v {
-					selectedCount++
-				}
-			}
-			if selectedCount == 0 {
-				fmt.Println("No tickets selected. Select tickets first.")
-				continue
-			}
+		if shouldEstimate {
 			return estimateSelectedTickets(client, cfg, issues, selected, storyPoints, configDir)
 		}
-
-		// Try to parse as ticket number
-		ticketNum, err := strconv.Atoi(input)
-		if err != nil {
-			fmt.Println("Invalid input. Please enter a ticket number, action, or 'q' to quit.")
+		if action == "mark" {
+			markAllOnPage(selected, pageIssues)
 			continue
 		}
-
-		// Validate ticket number
-		if ticketNum < 1 || ticketNum > len(issues) {
-			fmt.Printf("Invalid ticket number. Please enter a number between 1 and %d.\n", len(issues))
+		if action == "unmark" {
+			unmarkAllOnPage(selected, pageIssues)
 			continue
 		}
-
-		// Toggle selection
-		selectedIssue := issues[ticketNum-1]
-		selected[selectedIssue.Key] = !selected[selectedIssue.Key]
-		if selected[selectedIssue.Key] {
-			fmt.Printf("Selected %s\n", selectedIssue.Key)
-		} else {
-			fmt.Printf("Deselected %s\n", selectedIssue.Key)
+		if newPage >= 0 {
+			currentPage = newPage
+			continue
 		}
+		if action == actionToggle {
+			toggleEstimateTicketSelection(selected, issues, input)
+		}
+	}
+}
+
+func displayEstimatePage(
+	pageIssues []jira.Issue, start, currentPage, totalPages, totalIssues int,
+	selected map[string]bool,
+) {
+	selectedCount := countEstimateSelected(selected)
+	fmt.Printf("\n=== Page %d of %d (%d tickets, %d selected) ===\n\n",
+		currentPage+1, totalPages, totalIssues, selectedCount)
+
+	fmt.Printf("%-4s %-12s %-50s %-12s %-20s %-8s\n", "#", "Key", "Summary", "Priority", "Assignee", "Status")
+	fmt.Println(strings.Repeat("-", 110))
+
+	for i := range pageIssues {
+		issue := &pageIssues[i]
+		idx := start + i + 1
+		priority := getPriorityName(issue)
+		assignee := getAssigneeName(issue)
+		summary := truncateSummary(issue.Fields.Summary, 48)
+		marker := ""
+		if selected[issue.Key] {
+			marker = "✓ "
+		}
+
+		fmt.Printf("%-4d %-12s %-50s %-12s %-20s %-8s %s\n",
+			idx, issue.Key, summary, priority, assignee, issue.Fields.Status.Name, marker)
+	}
+
+	fmt.Println()
+	fmt.Printf("Actions: [1-%d] toggle ticket | [m]ark all | [u]nmark all | "+
+		"[e]stimate selected | [n]ext | [p]rev | [q]uit\n", len(pageIssues))
+	fmt.Print("> ")
+}
+
+func countEstimateSelected(selected map[string]bool) int {
+	count := 0
+	for _, v := range selected {
+		if v {
+			count++
+		}
+	}
+	return count
+}
+
+func processEstimateInput(
+	input string, currentPage, totalPages, totalIssues int,
+	selected map[string]bool, _ []jira.Issue,
+) (action string, newPage int, shouldQuit, shouldEstimate bool) {
+	if input == "n" || input == "next" {
+		if currentPage < totalPages-1 {
+			return "", currentPage + 1, false, false
+		}
+		fmt.Println("Already on last page.")
+		return "", -1, false, false
+	}
+
+	if input == "p" || input == "prev" {
+		if currentPage > 0 {
+			return "", currentPage - 1, false, false
+		}
+		fmt.Println("Already on first page.")
+		return "", -1, false, false
+	}
+
+	if input == "q" || input == "quit" {
+		return "", -1, true, false
+	}
+
+	if input == "m" || input == "mark all" {
+		return "mark", -1, false, false
+	}
+
+	if input == "u" || input == "unmark all" {
+		return "unmark", -1, false, false
+	}
+
+	if input == "e" || input == "estimate" {
+		if countSelected(selected) == 0 {
+			fmt.Println("No tickets selected. Select tickets first.")
+			return "", -1, false, false
+		}
+		return "", -1, false, true
+	}
+
+	ticketNum, err := strconv.Atoi(input)
+	if err != nil {
+		fmt.Println("Invalid input. Please enter a ticket number, action, or 'q' to quit.")
+		return "", -1, false, false
+	}
+
+	if ticketNum < 1 || ticketNum > totalIssues {
+		fmt.Printf("Invalid ticket number. Please enter a number between 1 and %d.\n", totalIssues)
+		return "", -1, false, false
+	}
+
+	return actionToggle, -1, false, false
+}
+
+func markAllOnPage(selected map[string]bool, pageIssues []jira.Issue) {
+	for i := range pageIssues {
+		selected[pageIssues[i].Key] = true
+	}
+	fmt.Printf("Marked %d tickets on this page.\n", len(pageIssues))
+}
+
+func unmarkAllOnPage(selected map[string]bool, pageIssues []jira.Issue) {
+	for i := range pageIssues {
+		selected[pageIssues[i].Key] = false
+	}
+	fmt.Printf("Unmarked %d tickets on this page.\n", len(pageIssues))
+}
+
+func toggleEstimateTicketSelection(selected map[string]bool, issues []jira.Issue, input string) {
+	ticketNum, err := strconv.Atoi(input)
+	if err != nil {
+		return // Input already validated by caller
+	}
+	selectedIssue := issues[ticketNum-1]
+	selected[selectedIssue.Key] = !selected[selectedIssue.Key]
+	if selected[selectedIssue.Key] {
+		fmt.Printf("Selected %s\n", selectedIssue.Key)
+	} else {
+		fmt.Printf("Deselected %s\n", selectedIssue.Key)
 	}
 }
 

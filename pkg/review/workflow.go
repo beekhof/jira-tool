@@ -268,7 +268,10 @@ func HandleWorkflowError(err error, step WorkflowStep, reader *bufio.Reader) (Ac
 }
 
 // ProcessTicketWorkflow processes a single ticket through the guided review workflow
-func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiClient, reader *bufio.Reader, cfg *config.Config, ticket *jira.Issue, configDir string) error {
+func ProcessTicketWorkflow(
+	client jira.JiraClient, geminiClient gemini.GeminiClient, reader *bufio.Reader,
+	cfg *config.Config, ticket *jira.Issue, configDir string,
+) error {
 	// Initialize status based on current ticket state
 	status := &TicketStatus{}
 	*status = InitializeStatusFromTicket(client, ticket, cfg)
@@ -285,72 +288,7 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 		{
 			step: StepDescription,
 			handler: func() (bool, error) {
-				// Check if description meets quality criteria
-				isValid, reason, err := CheckDescriptionQuality(client, ticket, cfg)
-				if err != nil {
-					return false, err
-				}
-				if !isValid {
-					fmt.Printf("Description issue: %s\n", reason)
-					fmt.Print("Generate/update description? [Y/n] ")
-					response, err := reader.ReadString('\n')
-					if err != nil {
-						return false, err
-					}
-					response = strings.TrimSpace(strings.ToLower(response))
-					if response == "" || response == "y" || response == "yes" {
-						// Get existing description
-						existingDesc, err := client.GetTicketDescription(ticket.Key)
-						if err != nil {
-							existingDesc = "" // Continue with empty description if unavailable
-						}
-						// Run Q&A flow (pass issueTypeName for Epic/Feature detection, include child tickets in context)
-						issueTypeName := ticket.Fields.IssueType.Name
-						answerInputMethod := cfg.AnswerInputMethod
-						if answerInputMethod == "" {
-							answerInputMethod = "readline"
-						}
-						description, err := qa.RunQnAFlow(
-							geminiClient, ticket.Fields.Summary, cfg.MaxQuestions,
-							ticket.Fields.Summary, issueTypeName, existingDesc,
-							client, ticket.Key, cfg.EpicLinkFieldID, answerInputMethod)
-						if err != nil {
-							return false, err
-						}
-						// Print the generated description and ask for confirmation
-						fmt.Println("\nGenerated description:")
-						fmt.Println("---")
-						fmt.Println(description)
-						fmt.Println("---")
-						fmt.Print("\nUpdate ticket with this description? [Y/n/e(dit)] ")
-						confirm, err := reader.ReadString('\n')
-						if err != nil {
-							return false, err
-						}
-						confirm = strings.TrimSpace(strings.ToLower(confirm))
-
-						if confirm == "e" || confirm == "edit" {
-							// Open in editor
-							editedDescription, err := editor.OpenInEditor(description)
-							if err != nil {
-								return false, fmt.Errorf("failed to edit description: %w", err)
-							}
-							description = editedDescription
-						}
-
-						if confirm != "n" && confirm != "no" {
-							// Update ticket
-							if err := client.UpdateTicketDescription(ticket.Key, description); err != nil {
-								return false, err
-							}
-							return true, nil
-						}
-						// User declined to save
-						return false, nil
-					}
-					return false, nil // User skipped
-				}
-				return true, nil // Description is valid
+				return handleDescriptionStep(client, geminiClient, reader, cfg, ticket)
 			},
 			required: true,
 		},
@@ -405,75 +343,12 @@ func ProcessTicketWorkflow(client jira.JiraClient, geminiClient gemini.GeminiCli
 
 	// Process each step
 	for _, stepInfo := range steps {
-		// Check if step is already complete in status
-		if status.IsStepComplete(stepInfo.step) {
+		if shouldSkipStep(status, ticket, stepInfo.step) {
 			continue
 		}
 
-		// Check if step is already complete in ticket (for component and assignment steps)
-		if stepInfo.step == StepComponent {
-			if len(ticket.Fields.Components) > 0 {
-				// Component already set, mark as complete and skip
-				status.MarkComplete(StepComponent)
-				continue
-			}
-		}
-
-		if stepInfo.step == StepAssignment {
-			// Check if ticket is already assigned
-			if ticket.Fields.Assignee.DisplayName != "" ||
-				ticket.Fields.Assignee.AccountID != "" ||
-				ticket.Fields.Assignee.Name != "" {
-				// Already assigned, mark as complete and skip
-				status.MarkComplete(StepAssignment)
-				continue
-			}
-		}
-
-		if stepInfo.step == StepStoryPoints {
-			// Check if story points are already set
-			if ticket.Fields.StoryPoints > 0 {
-				// Story points already set, mark as complete and skip
-				status.MarkComplete(StepStoryPoints)
-				continue
-			}
-		}
-
-		// Execute step with retry logic
-		for {
-			completed, err := stepInfo.handler()
-			if err != nil {
-				// Handle error
-				action, actionErr := HandleWorkflowError(err, stepInfo.step, reader)
-				if actionErr != nil {
-					return actionErr
-				}
-
-				switch action {
-				case ActionRetry:
-					continue // Retry the step
-				case ActionSkip:
-					return nil // Skip remaining steps
-				case ActionAbort:
-					return fmt.Errorf("workflow aborted by user")
-				}
-			}
-
-			if !completed {
-				// User skipped this step - skip all remaining steps
-				return nil
-			}
-
-			// Mark step as complete
-			status.MarkComplete(stepInfo.step)
-
-			// Refresh ticket data from Jira
-			issues, err := client.SearchTickets(fmt.Sprintf("key = %s", ticket.Key))
-			if err == nil && len(issues) > 0 {
-				*ticket = issues[0]
-			}
-
-			break // Move to next step
+		if err := executeWorkflowStep(client, reader, status, ticket, stepInfo); err != nil {
+			return err
 		}
 	}
 
@@ -499,5 +374,157 @@ func (ts *TicketStatus) IsStepComplete(step WorkflowStep) bool {
 		return ts.AssignmentComplete
 	default:
 		return false
+	}
+}
+
+func handleDescriptionStep(
+	client jira.JiraClient, geminiClient gemini.GeminiClient,
+	reader *bufio.Reader, cfg *config.Config, ticket *jira.Issue,
+) (bool, error) {
+	isValid, reason, err := CheckDescriptionQuality(client, ticket, cfg)
+	if err != nil {
+		return false, err
+	}
+	if isValid {
+		return true, nil
+	}
+
+	fmt.Printf("Description issue: %s\n", reason)
+	fmt.Print("Generate/update description? [Y/n] ")
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return false, err
+	}
+	response = strings.TrimSpace(strings.ToLower(response))
+	if response != "" && response != "y" && response != "yes" {
+		return false, nil
+	}
+
+	return generateAndUpdateDescription(client, geminiClient, reader, cfg, ticket)
+}
+
+func generateAndUpdateDescription(
+	client jira.JiraClient, geminiClient gemini.GeminiClient,
+	reader *bufio.Reader, cfg *config.Config, ticket *jira.Issue,
+) (bool, error) {
+	existingDesc, err := client.GetTicketDescription(ticket.Key)
+	if err != nil {
+		existingDesc = ""
+	}
+
+	issueTypeName := ticket.Fields.IssueType.Name
+	answerInputMethod := cfg.AnswerInputMethod
+	if answerInputMethod == "" {
+		answerInputMethod = "readline"
+	}
+
+	description, err := qa.RunQnAFlow(
+		geminiClient, ticket.Fields.Summary, cfg.MaxQuestions,
+		ticket.Fields.Summary, issueTypeName, existingDesc,
+		client, ticket.Key, cfg.EpicLinkFieldID, answerInputMethod)
+	if err != nil {
+		return false, err
+	}
+
+	fmt.Println("\nGenerated description:")
+	fmt.Println("---")
+	fmt.Println(description)
+	fmt.Println("---")
+	fmt.Print("\nUpdate ticket with this description? [Y/n/e(dit)] ")
+
+	confirm, err := reader.ReadString('\n')
+	if err != nil {
+		return false, err
+	}
+	confirm = strings.TrimSpace(strings.ToLower(confirm))
+
+	if confirm == "e" || confirm == "edit" {
+		editedDescription, err := editor.OpenInEditor(description)
+		if err != nil {
+			return false, fmt.Errorf("failed to edit description: %w", err)
+		}
+		description = editedDescription
+	}
+
+	if confirm == "n" || confirm == "no" {
+		return false, nil
+	}
+
+	if err := client.UpdateTicketDescription(ticket.Key, description); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func shouldSkipStep(status *TicketStatus, ticket *jira.Issue, step WorkflowStep) bool {
+	if status.IsStepComplete(step) {
+		return true
+	}
+
+	switch step {
+	case StepComponent:
+		if len(ticket.Fields.Components) > 0 {
+			status.MarkComplete(StepComponent)
+			return true
+		}
+	case StepAssignment:
+		if ticket.Fields.Assignee.DisplayName != "" ||
+			ticket.Fields.Assignee.AccountID != "" ||
+			ticket.Fields.Assignee.Name != "" {
+			status.MarkComplete(StepAssignment)
+			return true
+		}
+	case StepStoryPoints:
+		if ticket.Fields.StoryPoints > 0 {
+			status.MarkComplete(StepStoryPoints)
+			return true
+		}
+	}
+
+	return false
+}
+
+func executeWorkflowStep(
+	client jira.JiraClient, reader *bufio.Reader,
+	status *TicketStatus, ticket *jira.Issue,
+	stepInfo struct {
+		step     WorkflowStep
+		handler  func() (bool, error)
+		required bool
+	},
+) error {
+	for {
+		completed, err := stepInfo.handler()
+		if err != nil {
+			action, actionErr := HandleWorkflowError(err, stepInfo.step, reader)
+			if actionErr != nil {
+				return actionErr
+			}
+
+			switch action {
+			case ActionRetry:
+				continue
+			case ActionSkip:
+				return nil
+			case ActionAbort:
+				return fmt.Errorf("workflow aborted by user")
+			}
+		}
+
+		if !completed {
+			return nil
+		}
+
+		status.MarkComplete(stepInfo.step)
+		refreshTicketData(client, ticket)
+		break
+	}
+	return nil
+}
+
+func refreshTicketData(client jira.JiraClient, ticket *jira.Issue) {
+	issues, err := client.SearchTickets(fmt.Sprintf("key = %s", ticket.Key))
+	if err == nil && len(issues) > 0 {
+		*ticket = issues[0]
 	}
 }
