@@ -157,3 +157,67 @@ func GetChildTickets(client JiraClient, ticketKey, epicLinkFieldID string) ([]st
 
 	return childSummaries, nil
 }
+
+// ChildTicketInfo contains full information about a child ticket
+type ChildTicketInfo struct {
+	Key         string
+	Summary     string
+	StoryPoints int
+	Type        string
+	IsSubtask   bool
+}
+
+// GetChildTicketsDetailed retrieves all child tickets with full details
+func GetChildTicketsDetailed(client JiraClient, ticketKey, epicLinkFieldID string) ([]ChildTicketInfo, error) {
+	var children []ChildTicketInfo
+
+	// Get the ticket to check if it's an Epic
+	issue, err := client.GetIssue(ticketKey)
+	if err != nil {
+		return children, nil
+	}
+
+	// Get subtasks (for any ticket type)
+	subtasks, err := client.SearchTickets(fmt.Sprintf("parent = %s", ticketKey))
+	if err == nil {
+		for i := range subtasks {
+			storyPoints := int(subtasks[i].Fields.StoryPoints)
+			children = append(children, ChildTicketInfo{
+				Key:         subtasks[i].Key,
+				Summary:     subtasks[i].Fields.Summary,
+				StoryPoints: storyPoints,
+				Type:        subtasks[i].Fields.IssueType.Name,
+				IsSubtask:   true,
+			})
+		}
+	}
+
+	// If it's an Epic, also get tickets linked via Epic Link
+	if IsEpic(issue) && epicLinkFieldID != "" {
+		epicChildren, err := client.SearchTickets(fmt.Sprintf("%s = %s", epicLinkFieldID, ticketKey))
+		if err == nil {
+			for i := range epicChildren {
+				// Check if already added as subtask
+				isDuplicate := false
+				for _, existing := range children {
+					if existing.Key == epicChildren[i].Key {
+						isDuplicate = true
+						break
+					}
+				}
+				if !isDuplicate {
+					storyPoints := int(epicChildren[i].Fields.StoryPoints)
+					children = append(children, ChildTicketInfo{
+						Key:         epicChildren[i].Key,
+						Summary:     epicChildren[i].Fields.Summary,
+						StoryPoints: storyPoints,
+						Type:        epicChildren[i].Fields.IssueType.Name,
+						IsSubtask:   false,
+					})
+				}
+			}
+		}
+	}
+
+	return children, nil
+}

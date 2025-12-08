@@ -40,6 +40,10 @@ type Config struct {
 	TicketFilter string `yaml:"ticket_filter,omitempty"`
 	// Answer input method: "readline", "editor", or "readline_with_preview" (default: "readline")
 	AnswerInputMethod string `yaml:"answer_input_method,omitempty"`
+	// Default maximum story points per child ticket when decomposing (default: 5)
+	DefaultMaxDecomposePoints int `yaml:"default_max_decompose_points,omitempty"`
+	// Prompt template for decomposition planning with Gemini AI
+	DecomposePromptTemplate string `yaml:"decompose_prompt_template,omitempty"`
 }
 
 // GetConfigPath returns the path for the config file
